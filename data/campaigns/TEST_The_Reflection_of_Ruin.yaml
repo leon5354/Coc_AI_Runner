@@ -1,0 +1,115 @@
+title: "The Reflection of Ruin"
+introduction: |
+  The Investigators are drawn to "Dust & Echoes," a newly opened antique shop in the quiet town of Arkham. The shop's owner, Silas Blackwood, is an eccentric collector with a penchant for the macabre. A recent acquisition, an ornate Victorian-era mirror, is drawing a lot of attention, but not the kind Silas was hoping for. Customers report unsettling visions when gazing into its depths, and Silas himself has become increasingly withdrawn and paranoid. The Investigators might be antique collectors, friends of Silas, or simply curious about the strange rumors surrounding the mirror.
+
+plot_outline: |
+  The scenario begins with the Investigators arriving at Dust & Echoes. They will quickly learn about the mirror and the disturbing visions it induces. Silas Blackwood, initially eager to show off his prize, becomes increasingly frantic as the Investigators delve deeper into the mirror's history. The Investigators will need to research the mirror's origins, decipher cryptic symbols on its frame, and ultimately confront the malevolent entity trapped within the glass. The entity seeks to escape its prison by manipulating the fears and desires of those who gaze upon it, showing them visions of their own demise. As the Investigators get closer to the truth, they will experience increasingly vivid and terrifying visions, testing their sanity and resolve. The climax involves a ritual to either destroy the mirror and banish the entity or, in a darker turn, allow the entity to fully manifest in the world.
+
+endings:
+  - outcome: "Banishment"
+    description: |
+      The Investigators successfully perform the banishment ritual, shattering the mirror and sealing the entity back into its prison. They are left shaken but alive, forever haunted by the visions they witnessed. Silas Blackwood, though traumatized, begins to recover from his ordeal.
+  - outcome: "Failed Ritual"
+    description: |
+      The Investigators fail to complete the banishment ritual correctly. The entity escapes the mirror, possessing Silas Blackwood and transforming him into a monstrous avatar. The Investigators must fight to survive as the entity unleashes its wrath upon Arkham.
+  - outcome: "Corruption"
+    description: |
+      One or more of the Investigators succumb to the mirror's influence, becoming obsessed with their own visions of death. They may turn against their companions, seeking to hasten their demise or even sacrifice them to the entity in exchange for power or a chance to cheat fate.
+
+ai_party:
+  - name: "Silas Blackwood"
+    personality: "Eccentric, nervous, and increasingly paranoid. Initially welcoming and eager to show off his collection, but becomes more withdrawn and fearful as the scenario progresses. He is desperate to understand the mirror's power and to protect himself from its influence, but his curiosity often gets the better of him."
+    stats:
+      Sanity: 45
+      Skills:
+        Appraise: 60
+        History: 40
+        Occult: 30
+  - name: "Agnes Abernathy"
+    personality: "A local historian and expert on Arkham's folklore. Agnes is skeptical but open-minded, and her knowledge of local legends and occult practices proves invaluable in uncovering the mirror's secrets. She is fiercely protective of Arkham and its history, and will do anything to prevent the mirror from unleashing its evil upon the town."
+    stats:
+      Sanity: 70
+      Skills:
+        History: 75
+        Occult: 50
+        Library Use: 65
+
+scenes:
+  - id: "dust_and_echoes_entrance"
+    name: "Dust & Echoes: Front Room"
+    description: |
+      The air in Dust & Echoes is thick with the scent of dust, old paper, and mothballs. Sunlight struggles to penetrate the grime-coated windows, casting the room in a perpetual twilight. Shelves overflow with forgotten treasures: chipped porcelain dolls, tarnished silver cutlery, stacks of yellowed books, and antique clocks frozen in time. A grandfather clock ticks with unnerving slowness in the corner, each tick echoing through the cluttered space.
+    items:
+      - name: "Antique Music Box"
+        description: "A small, ornate music box made of rosewood and inlaid with mother-of-pearl. It plays a haunting melody when wound."
+        effect: "Winding the music box requires a Luck roll. If successful, the player hears a faint, whispered voice singing along with the melody. If failed, the melody becomes distorted and discordant, causing 1 SAN loss."
+    clues:
+      - description: "A half-torn newspaper clipping mentioning a series of mysterious deaths linked to a 'cursed mirror' in 1920s Boston. The article is dated July 17, 1924."
+        skill_check: "Library Use (Normal)"
+    next_scenes:
+      - target: "dust_and_echoes_backroom"
+        condition: "Speak with Silas Blackwood and express interest in the mirror."
+  - id: "dust_and_echoes_backroom"
+    name: "Dust & Echoes: Back Room"
+    description: |
+      The back room is significantly darker and more cluttered than the front. Piles of unopened boxes and shrouded furniture fill the space, creating a maze of shadows. The air is heavy with the smell of damp earth and decay. In the center of the room, resting on a velvet-draped pedestal, stands the mirror. It is a large, ornate Victorian-era mirror with a heavy, dark wood frame carved with grotesque figures and unsettling symbols. The glass is unusually clear and reflective, drawing the eye into its depths.
+    items:
+      - name: "The Mirror"
+        description: "A large, ornate Victorian-era mirror with a dark wood frame carved with grotesque figures. Looking into it reveals a vision of your own death."
+        effect: "Looking into the mirror requires a Sanity roll (0/1d4 SAN loss). If failed, the viewer sees a vivid and terrifying vision of their own death. The vision is specific to the individual and reflects their deepest fears and anxieties. The vision lasts for several seconds, leaving the viewer shaken and disoriented. Repeated exposure to the mirror's reflections increases the severity of the visions and the potential for long-term psychological trauma."
+      - name: "Silas's Notes"
+        description: "A collection of Silas's handwritten notes, detailing his research into the mirror's history and his growing obsession with its power."
+        effect: "Reading the notes reveals fragments of the mirror's history, including its creation by a reclusive occultist named Erasmus Thorne in the late 19th century. The notes also mention a ritual to control the entity trapped within the mirror, but the ritual is incomplete and potentially dangerous."
+    clues:
+      - description: "The symbols carved into the mirror's frame are Elder Signs, meant to ward off evil. However, they are arranged in a way that suggests they are also being used to contain something *within* the mirror."
+        skill_check: "Occult (Hard)"
+    next_scenes:
+      - target: "blackwood_manor"
+        condition: "Discover the mirror's connection to Erasmus Thorne and his manor."
+      - target: "arkham_historical_society"
+        condition: "Seek information about the mirror and Erasmus Thorne at the historical society."
+  - id: "blackwood_manor"
+    name: "Blackwood Manor (Exterior)"
+    description: |
+      Blackwood Manor looms on a craggy hilltop overlooking Arkham, a monument to decaying grandeur. The once-stately mansion is now a crumbling ruin, its windows boarded up and its grounds overgrown with weeds and thorny bushes. A palpable sense of decay and unease permeates the air. Ravens circle overhead, their calls echoing through the desolate landscape. The house feels… wrong.
+    items:
+      - name: "Overgrown Garden"
+        description: "The garden is choked with weeds and gnarled, thorny bushes. Amidst the chaos, one can find fragments of statues and forgotten fountains."
+        effect: "Searching the garden requires a Luck roll. If successful, the player finds a tarnished silver locket buried beneath a rose bush. The locket contains a miniature portrait of a beautiful woman, identified later as Erasmus Thorne's wife, Eliza."
+    clues:
+      - description: "Footprints leading to a hidden cellar door covered in moss and ivy can be found near the back of the manor. The footprints appear to be recent."
+        skill_check: "Tracking (Normal)"
+    next_scenes:
+      - target: "blackwood_manor_cellar"
+        condition: "Locate and open the hidden cellar door."
+  - id: "blackwood_manor_cellar"
+    name: "Blackwood Manor (Cellar)"
+    description: |
+      The cellar is damp and cold, the air thick with the smell of mildew and stagnant water. The only light comes from a flickering gas lamp, casting long, dancing shadows across the stone walls. Rows of dusty shelves line the walls, filled with jars containing strange specimens and arcane ingredients. In the center of the room, a makeshift altar is adorned with occult symbols and dried bloodstains.
+    items:
+      - name: "Thorne's Grimoire"
+        description: "A leather-bound grimoire filled with Erasmus Thorne's handwritten notes and incantations. The grimoire details the ritual he used to create the mirror and trap the entity within."
+        effect: "Reading the grimoire requires an Intelligence roll. If successful, the player gains a deeper understanding of the mirror's nature and the ritual to banish the entity. However, reading the grimoire also inflicts 1d6 SAN loss due to the unsettling nature of its contents."
+      - name: "Ritual Components"
+        description: "A collection of rare and exotic ingredients used in the banishment ritual, including mandrake root, powdered silver, and human blood."
+        effect: "Gathering the ritual components requires a successful Medicine roll. Failure results in a minor injury or illness due to handling the toxic substances."
+    clues:
+      - description: "A faded chalk drawing on the floor depicts the same grotesque figures carved into the mirror's frame. The drawing is surrounded by strange runes and symbols."
+        skill_check: "Occult (Hard)"
+    next_scenes:
+      - target: "dust_and_echoes_backroom"
+        condition: "Obtain the necessary ritual components and return to Dust & Echoes to perform the banishment."
+  - id: "arkham_historical_society"
+    name: "Arkham Historical Society"
+    description: |
+      The Arkham Historical Society is a dimly lit, musty-smelling building filled with artifacts and documents related to the town's history. The librarian, a stern-looking woman named Mrs. Armitage, is initially reluctant to assist the Investigators, but can be persuaded with a Persuade or Fast Talk roll.
+    items:
+      - name: "Local History Books"
+        description: "A collection of books detailing Arkham's history, including mentions of the Blackwood family and Erasmus Thorne."
+        effect: "Searching the books requires a Library Use roll. If successful, the player finds information about Erasmus Thorne's reputation as a recluse and his obsession with the occult. The books also mention rumors of strange experiments conducted at Blackwood Manor."
+    clues:
+      - description: "A photograph in the archives shows Blackwood Manor in its prime. The photograph reveals a secret window on the third floor that is no longer visible in the present day."
+        skill_check: "Spot Hidden (Normal)"
+    next_scenes:
+      - target: "blackwood_manor"
+        condition: "Seek the hidden window at Blackwood Manor."

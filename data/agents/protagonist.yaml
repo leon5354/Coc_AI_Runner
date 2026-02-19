@@ -1,0 +1,21 @@
+name: Player
+gender: Unknown
+occupation: Investigator / Analyst
+age: 30
+background: >
+  A sharp-witted analyst with a knack for patterns. 
+  Drawn to the occult after a strange incident in his childhood.
+  Rational but open-minded.
+stats:
+  Sanity: 60
+  HP: 12
+  Skills:
+    Spot Hidden: 70
+    Psychology: 60
+    Library Use: 50
+    Occult: 40
+inventory:
+  - Notebook & Pen
+  - Flashlight
+  - Old Lighter
+  - Smartphone

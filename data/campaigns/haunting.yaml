@@ -1,0 +1,47 @@
+
+title: The Haunting
+
+introduction: >
+  The investigators are called to investigate a series of strange occurrences
+  at the old Corbitt House on Exeter Street in Arkham. Locals whisper of
+  dark rituals and a malevolent presence within the decaying structure.
+
+scenes:
+  - description: >
+      The exterior of the Corbitt House is a chilling sight. Overgrown with
+      ivy, the house seems to loom over the street, casting long shadows.
+      The windows are dark and empty, giving the impression of vacant eyes
+      staring out into the night. A sense of unease settles upon anyone
+      who approaches.
+
+    clues:
+      - A broken window pane on the ground floor.
+      - Strange symbols etched into the front door.
+
+  - description: >
+      Inside, the Corbitt House is filled with the musty odor of decay.
+      Dust motes dance in the faint light filtering through the grimy windows.
+      The air is heavy with a sense of foreboding.
+
+    clues:
+      - A dusty, overturned table in the living room.
+      - Faint whispers that seem to come from the walls.
+
+npc_roster: []
+
+ai_party:
+  - name: Dr. Armitage
+    stats:
+      Sanity: 70
+      Skills:
+        Medicine: 60
+        Occult: 40
+    personality: Stoic, logical, skeptical
+
+  - name: Carolyn Fern
+    stats:
+      Sanity: 50
+      Skills:
+        Psychology: 70
+        History: 30
+    personality: Empathetic, cautious, prone to fear
