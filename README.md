@@ -4,6 +4,20 @@ A Call of Cthulhu (7th Edition) Campaign Runner powered by LLMs (Google Gemini, 
 
 ## Overview
 
+CoC AI Runner
+
+An advanced AI-driven Tabletop RPG engine designed for solo investigators. Immerse yourself in Lovecraftian horror with a fully autonomous Keeper (Game Master) and a team of AI Companions that react, investigate, and succumb to madness alongside you.
+
+Key Features:
+
+    Dual-Core Intelligence: Seamlessly switch between cloud power (Google Gemini, Claude 3, GPT-4) for deep roleplay and local models (Ollama/Mistral) for privacy.
+    Trilingual Support: Native fluency in English, Traditional Chinese (Written), and Cantonese (Spoken Dialogue).
+    Stop-and-Roll System: The game pauses for skill checks. Negotiate your approach with the Keeper before committing to a dice roll.
+    AI Party System: Recruit unique investigators (e.g., The Skeptic Doctor, The Paranoid Occultist) who have their own stats, inventory, and fears. They take turns, make decisions, and can go insane.
+    Scenario Architect: A built-in creative suite to generate full-length horror scenarios from a simple prompt.
+
+Powered by Python, Streamlit, and the Cosmic Void.
+
 This project is the core engine for running AI-driven tabletop RPG sessions. It features a **"Dual Logic"** system that adapts complexity based on your chosen model provider:
 
 *   **API Mode (Google/OpenRouter):** Uses complex system prompts for deep roleplay, tactical thinking, and rich atmospheric descriptions.
