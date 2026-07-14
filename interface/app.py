@@ -71,7 +71,8 @@ def start_game(campaign_path, resume: bool):
             f"LLM setup failed: {e}\n\nCopy .env.example to .env and fill in your provider + API key."
         )
         return
-    st.session_state.pop("last_roll", None)
+    for k in ("last_roll", "last_minigame", "turn_gen", "turn_label"):
+        st.session_state.pop(k, None)
 
 
 def render_sidebar(engine: Engine | None):
@@ -185,15 +186,36 @@ def render_sidebar(engine: Engine | None):
                 engine.set_controller(ch.id, want)
                 st.rerun()
 
+        with st.expander("📖 Character backgrounds"):
+            ids = [c.id for c in state.characters]
+            eid = st.selectbox("Character", ids, key="edit_char",
+                               format_func=lambda i: state.get_character(i).name)
+            ch = state.get_character(eid)
+            with st.form(f"edit_{eid}"):
+                nm = st.text_input("Name", value=ch.name)
+                lbl = st.text_input("Player label", value=ch.player_label)
+                pers = st.text_area("Personality", value=ch.personality, height=80,
+                                    help="Temperament and quirks. Drives how an AI character acts.")
+                back = st.text_area("Background story", value=ch.backstory, height=140,
+                                    help="History, occupation, secrets, why they're here. The Keeper "
+                                         "weaves this into the story.")
+                inv = st.text_area("Inventory (one per line)", value="\n".join(ch.inventory), height=80)
+                if st.form_submit_button("Save background"):
+                    engine.update_character(eid, name=nm.strip() or ch.name, player_label=lbl.strip(),
+                                            personality=pers.strip(), backstory=back.strip(),
+                                            inventory=inv.splitlines())
+                    st.rerun()
+
         with st.expander("➕ Add character"):
             with st.form("add_char", clear_on_submit=True):
                 nm = st.text_input("Name")
                 lbl = st.text_input("Player label (e.g. Player 2)", value="")
                 ctl = st.radio("Controlled by", ["human", "ai"], horizontal=True)
-                pers = st.text_input("Personality (for AI)", value="")
+                pers = st.text_input("Personality", value="")
+                back = st.text_area("Background story", value="", height=100)
                 if st.form_submit_button("Add") and nm.strip():
                     engine.add_character(nm.strip(), controller=ctl, personality=pers,
-                                         player_label=lbl.strip())
+                                         backstory=back.strip(), player_label=lbl.strip())
                     st.rerun()
 
         from interface.atmosphere import render_ambience, render_bgm_picker, scene_mood
@@ -211,7 +233,8 @@ def render_sidebar(engine: Engine | None):
         if c1.button("↩ Undo turn", width="stretch",
                      help="Rewind to before the last action / roll / minigame (one step)"):
             if engine.undo():
-                st.session_state.pop("last_roll", None)
+                for k in ("last_roll", "turn_gen", "turn_label"):
+                    st.session_state.pop(k, None)   # an in-flight turn would hold a stale state
                 st.rerun()
         c2.download_button("📜 Export", data=_transcript_md(engine),
                            file_name=f"{engine.campaign.title}.md",
@@ -234,7 +257,11 @@ def render_transcript(state):
     for m in state.messages_archive + state.messages:
         content = m["content"]
         if m["role"] == "player" and content.startswith("ROLL RESULT:"):
-            continue  # already shown in the dice log / animation
+            continue  # legacy saves: superseded by the "dice" role below
+        if m["role"] == "dice":
+            with st.chat_message("assistant", avatar="🎲"):
+                st.markdown(f"**{content}**")
+            continue
         if m["role"] == "player" and content.startswith("MINIGAME RESULT:"):
             with st.chat_message("player", avatar="🧩"):
                 st.caption("Minigame")
@@ -244,6 +271,29 @@ def render_transcript(state):
             if m.get("name"):
                 st.caption(m["name"])
             st.markdown(content)
+
+
+def start_turn(gen, label: str):
+    """Hand a keeper_steps generator to the live loop; the UI advances it one beat per rerun."""
+    st.session_state.turn_gen = gen
+    st.session_state.turn_label = label
+    st.rerun()
+
+
+def advance_turn(engine: Engine) -> bool:
+    """Run ONE beat of the in-flight turn, then rerun so the new message is visible.
+    Returns True if a turn is in flight (caller should stop rendering input widgets)."""
+    gen = st.session_state.get("turn_gen")
+    if gen is None:
+        return False
+    with st.spinner(st.session_state.get("turn_label", "…")):
+        try:
+            st.session_state.turn_label = next(gen)
+        except StopIteration:
+            st.session_state.pop("turn_gen", None)
+            st.session_state.pop("turn_label", None)
+    st.rerun()
+    return True  # unreachable; st.rerun() raises
 
 
 def render_roll_gate(engine: Engine):
@@ -257,20 +307,19 @@ def render_roll_gate(engine: Engine):
             st.caption(pr["reason"])
         c1, c2 = st.columns([1, 2])
         if c1.button("Roll the dice", type="primary", width="stretch"):
-            with st.spinner("The dice tumble..."):
-                result = engine.resolve_roll()
+            result = engine.roll_dice()          # roll first — the dice land before the Keeper speaks
             st.session_state.last_roll = {
                 "roll": result.roll, "tier": result.tier, "detail": result.detail,
                 "spec": engine.system.dice_spec(),
             }
-            st.rerun()
+            start_turn(engine.keeper_steps("Narrate the outcome of the roll above."),
+                       "The Keeper narrates the outcome…")
         with c2.form("negotiate", clear_on_submit=True):
             arg = st.text_input("...or argue for a different approach",
                                 placeholder="e.g. I'd use Fast Talk instead — he's distracted")
             if st.form_submit_button("Negotiate") and arg.strip():
-                with st.spinner("The Keeper considers..."):
-                    engine.negotiate_roll(arg.strip())
-                st.rerun()
+                start_turn(engine.keeper_steps(engine.begin_negotiate(arg.strip())),
+                           "The Keeper considers…")
 
 
 def render_play_tab(engine: Engine | None):
@@ -313,6 +362,9 @@ def render_play_tab(engine: Engine | None):
         render_dice_roll(lr["roll"], lr["tier"], lr["detail"], lr["spec"],
                          key=f"dice_{len(state.dice_log)}")
 
+    # A turn is in flight: run one beat, then rerun so the new message appears. Live play.
+    advance_turn(engine)
+
     if state.pending_roll:
         render_roll_gate(engine)
         return
@@ -323,9 +375,8 @@ def render_play_tab(engine: Engine | None):
         result = render_minigame(payload, key=f"mg_{state.turn_count}")
         if result:
             st.session_state.last_minigame = {"payload": payload, "result": result}
-            with st.spinner("The Keeper watches..."):
-                engine.resolve_minigame(result)
-            st.rerun()
+            start_turn(engine.keeper_steps(engine.begin_minigame_result(result)),
+                       "The Keeper watches…")
         return
 
     if "last_minigame" in st.session_state:
@@ -356,9 +407,8 @@ def render_play_tab(engine: Engine | None):
 
     prompt = st.chat_input(f"What does {state.get_character(acting).name} do?")
     if prompt:
-        with st.spinner("The Keeper writes..."):
-            engine.submit_action(acting, prompt)
-        st.rerun()
+        start_turn(engine.keeper_steps(engine.begin_action(acting, prompt)),
+                   "The Keeper considers…")
 
 
 def render_architect_tab():

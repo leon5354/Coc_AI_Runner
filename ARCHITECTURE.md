@@ -26,7 +26,7 @@ Streamlit UI (interface/app.py)
 
 | File | Role | Key contract |
 |---|---|---|
-| `core/engine.py` | UI-agnostic orchestrator | `submit_action / resolve_roll / negotiate_roll / resolve_minigame / undo / set_llm(main, util)` |
+| `core/engine.py` | UI-agnostic orchestrator | **Live turns**: `begin_action/begin_negotiate/begin_minigame_result` (instant) + `keeper_steps()` generator — each `next()` = ONE beat (keeper reply, one companion, one auto-roll), yields the next beat's label. Blocking wrappers `submit_action/resolve_roll/negotiate_roll/resolve_minigame` drain it (CLI/tests). Also `roll_dice`, `undo`, `update_character`, `set_llm(main, util)` |
 | `core/keeper.py` | Prompt assembly + parsing | `Control` dataclass; `MINIGAME_TYPES`; hybrid prose+json contract; `LANGUAGE_BLOCKS` (auto/en/zh/yue); `GOD_MODE_BLOCK` |
 | `core/game_state.py` | All runtime state | `GameState`/`CharacterState` dataclasses; JSON save per campaign; `pending_roll`/`pending_minigame` survive reload |
 | `core/campaign.py` | Schema v2 load + validate | `validate()` returns ALL problems; optional fields: `tone`, `npcs`, `escalation`, scene `keeper_notes` |
@@ -48,6 +48,9 @@ Streamlit UI (interface/app.py)
 2. **Minigame types**: `keeper.MINIGAME_TYPES` ⟷ `minigames.RENDERERS` ⟷ contract text.
 3. **Campaign schema**: `campaign.validate` ⟷ `scripter.ARCHITECT_INSTRUCTION_TEMPLATE` ⟷ sample `the_haunting.yaml`.
 4. **Save format**: `GameState` fields — add with defaults only (old saves must keep loading).
+5. **Live turn loop**: `engine.keeper_steps()` yields ⟷ `app.advance_turn()` runs one beat per
+   rerun. Any new LLM work inside a turn must `yield` a label, or it will block the UI.
+   Message roles the transcript renders: `keeper`, `player`, `companion`, `dice`, `researcher`.
 
 ## Tests (all offline, no API)
 

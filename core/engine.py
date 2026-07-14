@@ -28,11 +28,26 @@ def _character_from_sheet(name, sheet, controller="human", personality="", backs
     )
 
 
+def _protagonist_backstory(proto: dict, camp) -> str:
+    """Fold the sheet's flavour fields + the campaign's hook into one backstory blurb."""
+    bits = []
+    if proto.get("occupation"):
+        age = f", age {proto['age']}" if proto.get("age") else ""
+        bits.append(f"{proto['occupation']}{age}.")
+    if proto.get("background"):
+        bits.append(proto["background"].strip())
+    if camp.data.get("protagonist_hints"):
+        bits.append(camp.data["protagonist_hints"].strip())
+    return " ".join(bits)
+
+
 def new_game(campaign_path, protagonist_path=PROTAGONIST_YAML) -> GameState:
     camp = campaign_mod.load(campaign_path)
     proto = yaml.safe_load(Path(protagonist_path).read_text(encoding="utf-8"))
     chars = [_character_from_sheet(proto.get("name", "Player"), proto,
-                                   backstory=proto.get("background", ""), player_label="Player 1")]
+                                   personality=proto.get("personality", ""),
+                                   backstory=_protagonist_backstory(proto, camp),
+                                   player_label="Player 1")]
     for p in camp.ai_party:
         chars.append(_character_from_sheet(p["name"], p, controller="ai",
                                            personality=p.get("personality", ""),
@@ -77,18 +92,29 @@ class Engine:
     def _take_snapshot(self):
         self._undo_snapshot = asdict(self.state)
 
-    def submit_action(self, character_id: str, text: str):
+    # Turns run in two halves so a UI can redraw between beats (live play):
+    #   begin_*()  — instant, records the player's move
+    #   keeper_steps() — generator; each next() does ONE unit of work (a keeper reply,
+    #                    one companion's turn, one auto-roll) and yields the label of the
+    #                    next unit. Drain it for a blocking turn (CLI, tests).
+
+    def begin_action(self, character_id: str, text: str) -> str:
         self._take_snapshot()
         char = self.state.get_character(character_id)
         if char:
             self.state.active_character_id = character_id
         self.state.turn_count += 1
         self.state.messages.append({"role": "player", "name": char.name if char else None, "content": text})
-        self._keeper_cycle(text)
+        self.state.save()
+        return text
+
+    def keeper_steps(self, input_text: str):
+        """Generator: advances the turn one beat at a time. Yields a label for the next beat."""
+        yield from self._keeper_cycle_steps(input_text)
         self._finish_turn()
 
-    def resolve_roll(self):
-        """Roll the pending check for a human character and hand the result back to the keeper."""
+    def roll_dice(self):
+        """Roll the pending check for a human character. Returns the RollResult (no keeper call)."""
         pr = self.state.pending_roll
         if not pr:
             return None
@@ -98,29 +124,48 @@ class Engine:
         line = f"{char.name} — {pr['skill']}: {result.detail}"
         self.state.dice_log.append(line)
         self.state.pending_roll = None
-        self.state.messages.append({"role": "player", "name": char.name,
-                                    "content": f"ROLL RESULT: {line}"})
-        self._keeper_cycle(f"ROLL RESULT: {line}. Narrate the outcome.")
-        self._finish_turn()
+        self.state.messages.append({"role": "dice", "name": char.name, "content": line})
+        self.state.save()
         return result
 
-    def negotiate_roll(self, text: str):
+    def begin_negotiate(self, text: str) -> str:
         """Player argues for a different skill/approach instead of rolling."""
         self._take_snapshot()
         char = self.state.get_character(self.state.pending_roll["character_id"]) if self.state.pending_roll else None
         self.state.pending_roll = None
         self.state.messages.append({"role": "player", "name": char.name if char else None, "content": text})
-        self._keeper_cycle(f"(The player negotiates the pending roll instead of rolling): {text}")
-        self._finish_turn()
+        self.state.save()
+        return f"(The player negotiates the pending roll instead of rolling): {text}"
 
-    def resolve_minigame(self, result_text: str):
-        """Feed the outcome of a minigame back to the keeper."""
+    def begin_minigame_result(self, result_text: str) -> str:
+        """Record the outcome of a minigame; the keeper picks up from it."""
         self._take_snapshot()
         self.state.pending_minigame = None
         self.state.dice_log.append(f"[minigame] {result_text}")
         self.state.messages.append({"role": "player", "content": f"MINIGAME RESULT: {result_text}"})
-        self._keeper_cycle(f"MINIGAME RESULT: {result_text}. Continue the story from this.")
-        self._finish_turn()
+        self.state.save()
+        return f"MINIGAME RESULT: {result_text}. Continue the story from this."
+
+    # --- blocking wrappers (CLI / tests): run the whole turn at once ---
+    def submit_action(self, character_id: str, text: str):
+        for _ in self.keeper_steps(self.begin_action(character_id, text)):
+            pass
+
+    def resolve_roll(self):
+        result = self.roll_dice()
+        if result is None:
+            return None
+        for _ in self.keeper_steps("Narrate the outcome of the roll above."):
+            pass
+        return result
+
+    def negotiate_roll(self, text: str):
+        for _ in self.keeper_steps(self.begin_negotiate(text)):
+            pass
+
+    def resolve_minigame(self, result_text: str):
+        for _ in self.keeper_steps(self.begin_minigame_result(result_text)):
+            pass
 
     def set_controller(self, character_id: str, controller: str):
         char = self.state.get_character(character_id)
@@ -128,11 +173,24 @@ class Engine:
             char.controller = controller
             self.state.save()
 
+    def update_character(self, character_id: str, **fields):
+        """Edit a character's flavour/identity (name, personality, backstory, player_label)."""
+        char = self.state.get_character(character_id)
+        if not char:
+            return None
+        for key in ("name", "personality", "backstory", "player_label"):
+            if key in fields and fields[key] is not None:
+                setattr(char, key, fields[key])
+        if "inventory" in fields and fields["inventory"] is not None:
+            char.inventory = [i.strip() for i in fields["inventory"] if i.strip()]
+        self.state.save()
+        return char
+
     def add_character(self, name: str, controller: str = "human", sheet: dict = None,
-                      personality: str = "", player_label: str = ""):
+                      personality: str = "", backstory: str = "", player_label: str = ""):
         sheet = sheet or {"stats": self.system.character_sheet_defaults()}
-        char = _character_from_sheet(name, sheet, controller=controller,
-                                     personality=personality, player_label=player_label)
+        char = _character_from_sheet(name, sheet, controller=controller, personality=personality,
+                                     backstory=backstory, player_label=player_label)
         base, n = char.id, 2
         while self.state.get_character(char.id):
             char.id = f"{base}_{n}"; n += 1
@@ -151,8 +209,9 @@ class Engine:
         return handout
 
     # ---------- internals ----------
-    def _keeper_cycle(self, input_text: str, allow_companions: bool = True):
-        """Run keeper turns until no auto-resolvable roll remains. Sets pending_roll for human rolls."""
+    def _keeper_cycle_steps(self, input_text: str, allow_companions: bool = True):
+        """Keeper turns until no auto-resolvable roll remains. Yields between beats.
+        Sets pending_roll / pending_minigame and returns when it needs the player."""
         actors_requested = []
         for _ in range(MAX_KEEPER_CYCLES):
             narrative, ctrl = self.keeper.respond(self.state, input_text)
@@ -160,9 +219,11 @@ class Engine:
                 self.state.messages.append({"role": "keeper", "content": narrative})
             self._apply_effects(ctrl)
             actors_requested.extend(ctrl.characters_act)
+            self.state.save()
 
             if ctrl.minigame and not ctrl.roll_request:
                 self.state.pending_minigame = ctrl.minigame
+                self.state.save()
                 return  # gate: wait for the player to play it out
 
             if not ctrl.roll_request:
@@ -174,14 +235,20 @@ class Engine:
                     "character_id": char.id, "skill": skill, "target": target,
                     "difficulty": difficulty, "reason": ctrl.roll_request.get("reason", ""),
                 }
+                self.state.save()
                 return  # gate: wait for the human to roll
+
+            yield f"🎲 {char.name} rolls {skill}…"
             result = self.system.skill_check(target, difficulty)
             line = f"{char.name} — {skill}: {result.detail}"
             self.state.dice_log.append(line)
-            input_text = f"ROLL RESULT: {line}. Narrate the outcome."
+            self.state.messages.append({"role": "dice", "name": char.name, "content": line})
+            self.state.save()
+            yield "The Keeper narrates the outcome…"
+            input_text = "Narrate the outcome of the roll above."
 
         if allow_companions and not self.state.pending_roll and not self.state.pending_minigame:
-            self._companion_turns(actors_requested)
+            yield from self._companion_turns_steps(actors_requested)
 
     def _resolve_roll_target(self, roll_request):
         """Map the keeper's requested character/skill onto real state; coerce loosely, never fail."""
@@ -251,7 +318,7 @@ class Engine:
             else:
                 st.dice_log.append(f"[warn] keeper referenced unknown scene {ctrl.scene_transition!r} — ignored")
 
-    def _companion_turns(self, requested_ids):
+    def _companion_turns_steps(self, requested_ids):
         st = self.state
         if st.party_mode == "solo":
             return
@@ -266,12 +333,15 @@ class Engine:
         agent = PlayerAgent(self.llm)
         actions = []
         for char in actors:
+            yield f"🎭 {char.name} decides what to do…"
             action = agent.take_turn(char, st, self.campaign)
             st.messages.append({"role": "companion", "name": char.name, "content": action})
+            st.save()
             actions.append(f"{char.name}: {action}")
+        yield "The Keeper resolves the party's actions…"
         wrap = "COMPANION ACTIONS this turn:\n" + "\n".join(actions) + \
                "\nResolve these actions briefly (auto-roll any checks yourself via roll_request)."
-        self._keeper_cycle(wrap, allow_companions=False)
+        yield from self._keeper_cycle_steps(wrap, allow_companions=False)
 
     def _finish_turn(self):
         if not self.state.pending_roll and not self.state.pending_minigame:

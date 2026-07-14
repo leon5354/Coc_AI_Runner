@@ -38,4 +38,20 @@
 - Gotcha learned: multi-line f-string HTML in st.markdown gets indented lines parsed as a
   markdown code block — emit single-line HTML. Lazily-imported modules may need a server restart.
 
-**Known state:** all offline tests pass; live-LLM play verified with OpenRouter.
+**Live-turn + character-background pass (same day):**
+- Turns were computed all at once then dumped into the transcript. Split the turn loop into a
+  generator (`engine.keeper_steps()`): each `next()` does ONE beat (keeper reply / one companion's
+  turn / one auto-roll) and yields the next beat's label; `app.advance_turn()` runs one beat per
+  rerun. You now watch it unfold: your line → Keeper → 🎲 companion's roll → Keeper's outcome.
+  Blocking wrappers (`submit_action` etc.) still drain the generator for CLI/tests.
+- AI/companion rolls now appear in the transcript as a `dice` role message (were dice-log only).
+- Character backgrounds: the Keeper never saw them. `build_state_block` now includes each
+  character's personality + background, and is told to tie the horror to their history.
+  Protagonist backstory folds in occupation/age + the campaign's `protagonist_hints`.
+  New sidebar "📖 Character backgrounds" editor (name/personality/background/inventory, any
+  character, any time) via `engine.update_character`; add-character gained a background field.
+- New `test_live_turn.py`: asserts beats arrive separately (transcript grows between yields),
+  AI rolls are their own beat, human rolls still gate, and backgrounds reach the prompt.
+
+**Known state:** all offline tests pass; live-LLM play verified with OpenRouter (beat-by-beat
+sequencing confirmed in-browser: Keeper reply on screen while the companion was still thinking).

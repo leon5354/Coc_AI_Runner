@@ -2,10 +2,14 @@ name: Player
 gender: Unknown
 occupation: Investigator / Analyst
 age: 30
+personality: >
+  Rational but open-minded. Calm under pressure, and stubborn once a thread is
+  pulled — the kind of person who keeps reading when they should run.
 background: >
-  A sharp-witted analyst with a knack for patterns. 
-  Drawn to the occult after a strange incident in his childhood.
-  Rational but open-minded.
+  A sharp-witted analyst with a knack for patterns. Drawn to the occult after a
+  strange incident in childhood that no one else remembers: a night the house
+  was full of voices, and by morning the family never spoke of it again.
+  Rational by trade, haunted by that one gap in the record.
 stats:
   Sanity: 60
   HP: 12
