@@ -1,415 +1,378 @@
+"""Streamlit UI — thin layer over core.engine. All game logic lives in the engine."""
 import os
 import sys
+from pathlib import Path
+
 import streamlit as st
-import yaml
-import json
-import time
-import re
-import random
 from dotenv import load_dotenv
 
-# --- PATH SETUP ---
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+CURRENT_DIR = Path(__file__).resolve().parent
+ROOT = CURRENT_DIR.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-# --- ENVIRONMENT VARIABLES ---
-load_dotenv()
+load_dotenv(ROOT / ".env")
 
-# --- IMPORTS ---
-try:
-    from core.rules import d100_roll, check_success, sanity_check
-    from agents.player_agent import PlayerAgent
-    from agents.scripter import Scripter
-    from core.keeper import Keeper
-except ImportError as e:
-    st.error(f"Import Error: {e}")
-    st.stop()
+from core import campaign as campaign_mod
+from core.engine import Engine, new_game
+from core.game_state import GameState, save_exists
+from interface.dice import render_dice_roll
 
-# ====================
-# HELPER FUNCTIONS
-# ====================
-def save_json(data, filepath):
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, default=str, ensure_ascii=False)
+st.set_page_config(page_title="AI TTRPG Runner", page_icon="🐙", layout="wide")
 
-def load_json(filepath):
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return json.load(f)
+ROLE_AVATARS = {"keeper": "🐙", "player": "🕵️", "companion": "🎭", "researcher": "📚"}
 
-def load_yaml(filepath):
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
 
-def get_campaign_files():
-    campaign_dir = os.path.join(parent_dir, 'data', 'campaigns')
-    os.makedirs(campaign_dir, exist_ok=True)
-    return [f for f in os.listdir(campaign_dir) if f.endswith('.yaml')]
+def get_engine() -> Engine | None:
+    return st.session_state.get("engine")
 
-def get_save_filename(campaign_filename):
-    base_name = os.path.splitext(campaign_filename)[0]
-    save_dir = os.path.join(parent_dir, 'data', 'saves')
-    os.makedirs(save_dir, exist_ok=True)
-    return os.path.join(save_dir, f"{base_name}_save.json")
 
-def sanitize_filename(name):
-    return re.sub(r'[\\/*?:"<>|]', "", name).strip().replace(" ", "_")
+# Curated OpenRouter picks (price/value for narrative play, July 2026) — free text still allowed.
+MAIN_MODELS = ["x-ai/grok-4.20", "x-ai/grok-4.5", "anthropic/claude-sonnet-5",
+               "google/gemini-3.5-flash", "qwen/qwen3.7-max", "minimax/minimax-m3"]
+UTIL_MODELS = ["google/gemini-3.1-flash-lite", "qwen/qwen3.7-plus", "minimax/minimax-m3",
+               "tencent/hy3", "stepfun/step-3.7-flash"]
+CUSTOM = "custom..."
 
-def save_current_state(current_file):
-    if 'game_state' not in st.session_state:
-        st.session_state.game_state = {}
-        
-    st.session_state.game_state['history'] = st.session_state.messages
-    
-    # Save Agent States
-    agents_data = {}
-    if 'keeper' in st.session_state and st.session_state.keeper:
-        for agent in st.session_state.keeper.ai_party:
-            agents_data[agent.name] = {
-                'inventory': getattr(agent, 'inventory', []),
-                'stats': agent.stats, 
-            }
-    st.session_state.game_state['agents'] = agents_data
-    
-    # Save Turn Queue
-    if 'turn_queue' in st.session_state:
-        st.session_state.game_state['turn_queue'] = st.session_state.turn_queue
 
-    save_path = get_save_filename(current_file)
-    save_json(st.session_state.game_state, save_path)
+def make_llms():
+    """Build (main, utility) LLM clients from in-app choices (session) or .env defaults."""
+    if os.getenv("MOCK_LLM") == "1":   # offline dev mode: scripted keeper, no API key
+        from cli_play import MockLLM
+        m = MockLLM()
+        return m, m
+    from core.llm_client import LLMClient
+    cfg = st.session_state.get("llm_cfg")
+    main = LLMClient(provider=cfg["provider"], model_name=cfg["model"]) if cfg else LLMClient()
+    ucfg = st.session_state.get("util_cfg")
+    if ucfg:
+        util = LLMClient(provider=ucfg["provider"], model_name=ucfg["model"])
+    elif os.getenv("UTILITY_MODEL"):
+        util = LLMClient(provider=os.getenv("UTILITY_PROVIDER") or None,
+                         model_name=os.getenv("UTILITY_MODEL"))
+    else:
+        util = None
+    return main, util
 
-# ====================
-# MAIN UI
-# ====================
-st.set_page_config(page_title='Coc AI Runner', page_icon='🐙', layout="wide")
 
-tab1, tab2 = st.tabs(["🕵️ Play Scenario", "📜 Scenario Architect"])
+def start_game(campaign_path, resume: bool):
+    save = save_exists(campaign_path)
+    if resume and save:
+        state = GameState.load(save)
+    else:
+        state = new_game(campaign_path)
+    try:
+        main, util = make_llms()
+        st.session_state.engine = Engine(state, llm=main, util_llm=util)
+        st.session_state.pop("setup_error", None)
+    except (ValueError, ImportError) as e:
+        st.session_state.engine = None
+        st.session_state.setup_error = (
+            f"LLM setup failed: {e}\n\nCopy .env.example to .env and fill in your provider + API key."
+        )
+        return
+    st.session_state.pop("last_roll", None)
 
-# --------------------
-# TAB 1: PLAY SCENARIO
-# --------------------
-with tab1:
+
+def render_sidebar(engine: Engine | None):
     with st.sidebar:
-        st.title("🐙 Coc AI Runner")
-        st.caption(f"Engine: {os.getenv('LLM_PROVIDER', 'Unknown').upper()}")
-        
-        # --- HERO CARD ---
-        try:
-            hero_path = os.path.join(parent_dir, 'data', 'agents', 'protagonist.yaml')
-            if os.path.exists(hero_path):
-                hero_data = load_yaml(hero_path)
-                with st.expander(f"🦸 {hero_data.get('name', 'Protagonist')}", expanded=True):
-                    st.caption(f"**Occupation:** {hero_data.get('occupation', 'Investigator')}")
-                    st.caption(f"**Gender:** {hero_data.get('gender', 'Unknown')}")
-                    
-                    stats = hero_data.get('stats', {})
-                    col1, col2 = st.columns(2)
-                    with col1: st.metric("SAN", stats.get('Sanity', 50))
-                    with col2: st.metric("HP", stats.get('HP', 10))
-                    
-                    st.markdown("**Skills:**")
-                    st.text(", ".join([f"{k} ({v}%)" for k,v in stats.get('Skills', {}).items()]))
-                    
-                    st.markdown("**Inventory:**")
-                    for item in hero_data.get('inventory', []):
-                        st.caption(f"- {item}")
-        except Exception as e:
-            st.error(f"Hero Load Error: {e}")
+        st.title("🐙 AI TTRPG Runner")
+        cfg = st.session_state.get("llm_cfg") or {
+            "provider": os.getenv("LLM_PROVIDER", "openrouter"),
+            "model": os.getenv("LLM_MODEL", "x-ai/grok-4.20"),
+        }
+        st.caption(("🎭 MOCK MODE — " if os.getenv("MOCK_LLM") == "1" else "")
+                   + f"LLM: {cfg['provider']} / {cfg['model']}")
 
-        st.divider()
-        
-        campaign_files = get_campaign_files()
-        if not campaign_files:
-            st.warning("No campaigns found.")
-            selected_file = None
-        else:
-            selected_file = st.selectbox('Select Campaign', campaign_files)
+        with st.expander("🧠 LLM settings"):
+            providers = ["openrouter", "google", "ollama"]
+            prov = st.selectbox("Provider", providers,
+                                index=providers.index(cfg["provider"]) if cfg["provider"] in providers else 0)
+            opts = MAIN_MODELS + [CUSTOM]
+            pick = st.selectbox("Keeper model", opts,
+                                index=opts.index(cfg["model"]) if cfg["model"] in opts else len(opts) - 1)
+            model = st.text_input("Custom model id", value=cfg["model"]) if pick == CUSTOM else pick
 
-        ENABLE_RESEARCHER = st.checkbox('Enable Researcher', value=False)
-        PROTAGONIST_MODE = st.checkbox('Solo Mode', value=True, help="Focuses narrative on YOU.")
+            ucfg = st.session_state.get("util_cfg")
+            uopts = ["(same as keeper)"] + UTIL_MODELS + [CUSTOM]
+            ucur = ucfg["model"] if ucfg else "(same as keeper)"
+            upick = st.selectbox("Utility model (summaries & lore — cheap)", uopts,
+                                 index=uopts.index(ucur) if ucur in uopts else len(uopts) - 1)
+            umodel = st.text_input("Custom utility model id",
+                                   value=ucur if ucfg else "") if upick == CUSTOM else upick
 
-        if st.button("Apply / Restart Scenario", type="primary"):
-            if 'current_campaign_file' in st.session_state and 'game_state' in st.session_state:
-                save_current_state(st.session_state.current_campaign_file)
-                st.toast("Saved previous game.")
-
-            st.session_state.current_campaign_file = selected_file
-            st.session_state.messages = []
-            st.session_state.keeper = None
-            st.session_state.turn_queue = []
-            st.session_state.pending_roll = False  # Reset roll state
-
-            new_save_path = get_save_filename(selected_file)
-            if os.path.exists(new_save_path):
-                try:
-                    st.session_state.game_state = load_json(new_save_path)
-                    st.session_state.messages = st.session_state.game_state.get('history', [])
-                    st.session_state.turn_queue = st.session_state.game_state.get('turn_queue', [])
-                    st.toast(f"Loaded save for {selected_file}")
-                except Exception:
-                    st.session_state.game_state = {}
-            else:
-                st.session_state.game_state = {}
-                st.toast(f"Started new game: {selected_file}")
-
-            st.rerun()
-            
-        # --- AI PARTY CARD ---
-        if 'keeper' in st.session_state and st.session_state.keeper and st.session_state.keeper.ai_party:
-            st.divider()
-            st.subheader("👥 Party Members")
-            for agent in st.session_state.keeper.ai_party:
-                with st.expander(f"{agent.name} ({agent.gender})"):
-                    st.caption(f"**Personality:** {agent.personality[:60]}...")
-                    san = agent.stats.get('Sanity', 50)
-                    st.progress(min(san, 100) / 100, text=f"Sanity: {san}")
-                    skills = agent.stats.get('Skills', {})
-                    if skills:
-                        st.markdown("**Skills:** " + ", ".join([f"{k}" for k in skills]))
-                    if hasattr(agent, 'inventory') and agent.inventory:
-                        st.markdown("**Inventory:**")
-                        for item in agent.inventory:
-                            st.caption(f"- {item}")
-                    else:
-                        st.caption("*No items*")
-
-    # Main Game Area
-    if 'current_campaign_file' in st.session_state and st.session_state.current_campaign_file:
-        current_file = st.session_state.current_campaign_file
-        st.subheader(f"📖 {current_file.replace('.yaml', '').replace('_', ' ')}")
-
-        try:
-            campaign_path = os.path.join(parent_dir, 'data', 'campaigns', current_file)
-            
-            if 'keeper' not in st.session_state or st.session_state.keeper is None:
-                st.session_state.keeper = Keeper(campaign_path, enable_researcher=ENABLE_RESEARCHER)
-                if 'game_state' in st.session_state:
-                    st.session_state.keeper.narrative_state = [
-                         {'description': m['content']} for m in st.session_state.messages if m['role'] == 'assistant'
-                    ]
-                    saved_agents = st.session_state.game_state.get('agents', {})
-                    for agent in st.session_state.keeper.ai_party:
-                        if agent.name in saved_agents:
-                            agent.inventory = saved_agents[agent.name].get('inventory', [])
-                            if 'stats' in saved_agents[agent.name]:
-                                agent.stats = saved_agents[agent.name]['stats']
-            else:
-                st.session_state.keeper.enable_researcher = ENABLE_RESEARCHER
-
-            # Display Chat
-            for message in st.session_state.messages:
-                role = message['role']
-                avatar = message.get('avatar', None)
-                if role == 'agent': avatar = '🗣️'
-                elif role == 'assistant': avatar = '🐙'
-                with st.chat_message(role, avatar=avatar):
-                    st.markdown(message['content'])
-
-            if 'turn_queue' not in st.session_state:
-                st.session_state.turn_queue = []
-            if 'pending_roll' not in st.session_state:
-                st.session_state.pending_roll = False
-
-            # --- INTERRUPT LOGIC: PENDING ROLL & NEGOTIATION ---
-            if st.session_state.pending_roll:
-                st.divider()
-                st.warning("🎲 THE KEEPER DEMANDS A ROLL!")
-                
-                col1, col2 = st.columns([1, 4])
-                
-                # --- OPTION 1: ACCEPT & ROLL ---
-                with col1:
-                    if st.button("✅ Roll d100", type="primary"):
-                        roll_val = random.randint(1, 100)
-                        result_str = "Success" if roll_val <= 50 else "Failure" 
-                        roll_msg = f"🎲 **Result:** {roll_val} ({result_str})"
-                        
-                        st.session_state.messages.append({'role': 'user', 'content': roll_msg})
-                        
-                        # Feed result back to Keeper
-                        with st.spinner("Resolving fate..."):
-                            resolution = st.session_state.keeper.generate_narrative(f"Result: {roll_val}. Resolve the scene.")
-                        
-                        # Remove [ROLL_REQUIRED] tag if present in resolution to avoid loop
-                        resolution = resolution.replace("[ROLL_REQUIRED]", "")
-                        
-                        st.session_state.messages.append({'role': 'assistant', 'content': resolution, 'avatar': '🐙'})
-                        
-                        # Reset state
-                        st.session_state.pending_roll = False
-                        
-                        if st.session_state.turn_queue:
-                             st.session_state.turn_queue.pop(0)
-
-                        st.rerun()
-
-                # --- OPTION 2: NEGOTIATE / CHANGE SKILL ---
-                with col2:
-                    negotiate_text = st.text_input("Negotiate / Change Skill", placeholder="Can I use Fast Talk instead?")
-                    if st.button("🤔 Negotiate"):
-                        if negotiate_text:
-                            st.session_state.messages.append({'role': 'user', 'content': f"(Negotiating) {negotiate_text}"})
-                            
-                            with st.spinner("The Keeper considers..."):
-                                # Send negotiation to Keeper
-                                new_response = st.session_state.keeper.generate_narrative(f"Player asks: '{negotiate_text}'. Re-evaluate the skill check.")
-                            
-                            # Update UI
-                            if "[ROLL_REQUIRED]" in new_response:
-                                display_response = new_response.replace("[ROLL_REQUIRED]", "")
-                                st.session_state.messages.append({'role': 'assistant', 'content': display_response, 'avatar': '🐙'})
-                                st.session_state.pending_roll = True # Still pending (new roll)
-                            else:
-                                st.session_state.messages.append({'role': 'assistant', 'content': new_response, 'avatar': '🐙'})
-                                st.session_state.pending_roll = False # Negotiation ended the roll request (rare)
-                            
-                            st.rerun()
-
-
-            # --- NORMAL GAME LOGIC (Only if no pending roll) ---
-            elif not st.session_state.turn_queue:
-                # PLAYER TURN
-                col1, col2 = st.columns([8, 2])
-                with col2:
-                    action_mode = st.radio("Phase", ["🎬 Action", "🗣️ Discuss"], label_visibility="collapsed")
-                
-                prompt_label = "What do you do?" if "Action" in action_mode else "Discuss plan..."
-
-                # --- MANUAL END TURN BUTTON ---
-                if "Action" in action_mode and hasattr(st.session_state.keeper, 'ai_party') and st.session_state.keeper.ai_party:
-                    if st.button("⏩ End Turn (Pass to Party)"):
-                        st.session_state.turn_queue = [agent.name for agent in st.session_state.keeper.ai_party]
-                        st.toast("Turn passed to AI Party...")
-                        st.rerun()
-
-                if prompt := st.chat_input(prompt_label):
-                    st.session_state.messages.append({'role': 'user', 'content': prompt})
-                    with st.chat_message('user'):
-                        st.markdown(prompt)
-
-                    if "Action" in action_mode:
-                        with st.spinner("The Keeper is watching..."):
-                            keeper_response = st.session_state.keeper.generate_narrative(prompt)
-
-                        # CHECK FOR ROLL REQUIREMENT
-                        if "[ROLL_REQUIRED]" in keeper_response:
-                            st.session_state.pending_roll = True
-                            display_response = keeper_response.replace("[ROLL_REQUIRED]", "")
-                            st.session_state.messages.append({'role': 'assistant', 'content': display_response, 'avatar': '🐙'})
-                            st.rerun()
-
-                        st.session_state.messages.append({'role': 'assistant', 'content': keeper_response, 'avatar': '🐙'})
-                        with st.chat_message('assistant', avatar='🐙'):
-                            st.markdown(keeper_response)
-                            
-                        save_current_state(current_file)
-                    else:
-                        with st.spinner("Discussing..."):
-                            if hasattr(st.session_state.keeper, 'ai_party'):
-                                for agent in st.session_state.keeper.ai_party:
-                                    response = agent.generate_dialogue(
-                                        user_input=prompt,
-                                        narrative_state=st.session_state.keeper.narrative_state
-                                    )
-                                    formatted_resp = f"**{agent.name}:** {response}"
-                                    st.session_state.messages.append({'role': 'agent', 'content': formatted_resp})
-                                    with st.chat_message('agent', avatar='🗣️'):
-                                        st.markdown(formatted_resp)
-                        save_current_state(current_file)
-            else:
-                # AGENT TURN
-                next_agent_name = st.session_state.turn_queue[0]
-                agent_obj = next((a for a in st.session_state.keeper.ai_party if a.name == next_agent_name), None)
-                
-                if agent_obj:
-                    st.divider()
-                    st.info(f"👉 It is **{next_agent_name}'s** turn.")
-                    if st.button(f"▶ Process {next_agent_name}'s Action"):
-                        with st.spinner(f"{next_agent_name} is acting..."):
-                            action_intent = agent_obj.generate_action(st.session_state.keeper.narrative_state)
-                            st.session_state.messages.append({'role': 'agent', 'content': action_intent, 'avatar': '🗣️'})
-                            
-                            agent_resolution = st.session_state.keeper.generate_narrative(f"Resolution: {action_intent}")
-                            
-                            # CHECK FOR ROLL IN AGENT TURN
-                            if "[ROLL_REQUIRED]" in agent_resolution:
-                                st.session_state.pending_roll = True
-                                display_res = agent_resolution.replace("[ROLL_REQUIRED]", "")
-                                st.session_state.messages.append({'role': 'assistant', 'content': display_res, 'avatar': '🐙'})
-                                # Do NOT pop queue yet; wait for roll resolution
-                                st.rerun()
-
-                            st.session_state.messages.append({'role': 'assistant', 'content': agent_resolution, 'avatar': '🐙'})
-                            
-                            st.session_state.turn_queue.pop(0)
-                            save_current_state(current_file)
-                            st.rerun()
+            if st.button("Apply", key="apply_llm"):
+                if engine and os.getenv("MOCK_LLM") != "1":
+                    try:
+                        from core.llm_client import LLMClient
+                        main = LLMClient(provider=prov, model_name=model.strip())
+                        util = None if umodel == "(same as keeper)" else \
+                            LLMClient(provider=prov, model_name=umodel.strip())
+                        engine.set_llm(main, util)
+                    except (ValueError, ImportError) as e:
+                        st.error(str(e))
+                        st.stop()
+                st.session_state.llm_cfg = {"provider": prov, "model": model.strip()}
+                if umodel == "(same as keeper)":
+                    st.session_state.pop("util_cfg", None)
                 else:
-                    st.session_state.turn_queue.pop(0)
+                    st.session_state.util_cfg = {"provider": prov, "model": umodel.strip()}
+                st.rerun()
+
+        campaigns = campaign_mod.list_campaigns()
+        if not campaigns:
+            st.error("No valid campaigns in data/campaigns/")
+            return
+        names = [p.stem for p in campaigns]
+        idx = st.selectbox("Campaign", range(len(names)), format_func=lambda i: names[i])
+        chosen = campaigns[idx]
+
+        c1, c2 = st.columns(2)
+        has_save = save_exists(chosen) is not None
+        if c1.button("▶ Resume" if has_save else "▶ Start", width="stretch"):
+            start_game(chosen, resume=True)
+            st.rerun()
+        if c2.button("🔄 Restart", width="stretch"):
+            save = save_exists(chosen)
+            if save:
+                save.unlink()
+            start_game(chosen, resume=False)
+            st.rerun()
+
+        if not engine:
+            return
+        state = engine.state
+        st.divider()
+
+        from core.keeper import LANGUAGE_LABELS
+        langs = list(LANGUAGE_LABELS)
+        lang = st.segmented_control("Language", langs,
+                                    format_func=LANGUAGE_LABELS.get,
+                                    default=state.language if state.language in langs else "auto",
+                                    key="lang_pick")
+        if lang and lang != state.language:
+            state.language = lang
+            state.save()
+
+        god = st.toggle("😇 God mode", value=state.god_mode,
+                        help="ON: the Keeper and companions play along with whatever you steer "
+                             "toward — never blocking your intent, biasing fate your way. "
+                             "OFF: impartial Keeper, companions with their own will.")
+        if god != state.god_mode:
+            state.god_mode = god
+            state.save()
+
+        mode = st.radio("AI party mode", ["solo", "keeper", "active"],
+                        index=["solo", "keeper", "active"].index(state.party_mode),
+                        help="solo: AI companions are narrated NPCs. keeper: they act when the "
+                             "Keeper calls on them. active: they act every turn.",
+                        horizontal=True)
+        if mode != state.party_mode:
+            state.party_mode = mode
+            state.save()
+
+        st.subheader("Party")
+        for ch in state.characters:
+            status = "" if ch.status == "active" else f" — {ch.status.upper()}"
+            st.markdown(f"**{ch.name}**{status}"
+                        + (f" · _{ch.player_label}_" if ch.player_label else ""))
+            st.progress(max(ch.hp, 0) / max(ch.max_hp, 1), text=f"HP {ch.hp}/{ch.max_hp}")
+            if ch.max_stress > 1:
+                st.progress(max(ch.stress, 0) / ch.max_stress, text=f"Mind {ch.stress}/{ch.max_stress}")
+            is_ai = st.toggle("AI-controlled", value=(ch.controller == "ai"), key=f"ctl_{ch.id}")
+            want = "ai" if is_ai else "human"
+            if want != ch.controller:
+                engine.set_controller(ch.id, want)
+                st.rerun()
+
+        with st.expander("➕ Add character"):
+            with st.form("add_char", clear_on_submit=True):
+                nm = st.text_input("Name")
+                lbl = st.text_input("Player label (e.g. Player 2)", value="")
+                ctl = st.radio("Controlled by", ["human", "ai"], horizontal=True)
+                pers = st.text_input("Personality (for AI)", value="")
+                if st.form_submit_button("Add") and nm.strip():
+                    engine.add_character(nm.strip(), controller=ctl, personality=pers,
+                                         player_label=lbl.strip())
                     st.rerun()
 
-        except Exception as e:
-            st.error(f"Game Error: {e}")
-            import traceback
-            st.text(traceback.format_exc())
+        from interface.atmosphere import render_ambience, render_bgm_picker, scene_mood
+        active = state.active_character() or state.characters[0]
+        render_ambience(scene_mood(engine.campaign, state.scene_id),
+                        active.stress / max(active.max_stress, 1),
+                        dice_nonce=len(state.dice_log))
+        render_bgm_picker()
+
+        with st.expander("🎲 Dice log"):
+            for line in reversed(state.dice_log[-25:]):
+                st.caption(line)
+
+        c1, c2 = st.columns(2)
+        if c1.button("↩ Undo turn", width="stretch",
+                     help="Rewind to before the last action / roll / minigame (one step)"):
+            if engine.undo():
+                st.session_state.pop("last_roll", None)
+                st.rerun()
+        c2.download_button("📜 Export", data=_transcript_md(engine),
+                           file_name=f"{engine.campaign.title}.md",
+                           mime="text/markdown", width="stretch",
+                           help="Download the full session transcript as Markdown")
+
+
+def _transcript_md(engine) -> str:
+    state = engine.state
+    lines = [f"# {engine.campaign.title}", ""]
+    for m in state.messages_archive + state.messages:
+        who = m.get("name") or m["role"].capitalize()
+        lines.append(f"**{who}:** {m['content']}\n")
+    if state.dice_log:
+        lines += ["---", "## Dice log", ""] + [f"- {l}" for l in state.dice_log]
+    return "\n".join(lines)
+
+
+def render_transcript(state):
+    for m in state.messages_archive + state.messages:
+        content = m["content"]
+        if m["role"] == "player" and content.startswith("ROLL RESULT:"):
+            continue  # already shown in the dice log / animation
+        if m["role"] == "player" and content.startswith("MINIGAME RESULT:"):
+            with st.chat_message("player", avatar="🧩"):
+                st.caption("Minigame")
+                st.markdown(f"*{content[len('MINIGAME RESULT:'):].strip()}*")
+            continue
+        with st.chat_message(m["role"], avatar=ROLE_AVATARS.get(m["role"], "❔")):
+            if m.get("name"):
+                st.caption(m["name"])
+            st.markdown(content)
+
+
+def render_roll_gate(engine: Engine):
+    state = engine.state
+    pr = state.pending_roll
+    char = state.get_character(pr["character_id"])
+    with st.container(border=True):
+        st.markdown(f"### 🎲 {char.name} must roll **{pr['skill']}** "
+                    f"(target {pr['target']}, {pr['difficulty']})")
+        if pr.get("reason"):
+            st.caption(pr["reason"])
+        c1, c2 = st.columns([1, 2])
+        if c1.button("Roll the dice", type="primary", width="stretch"):
+            with st.spinner("The dice tumble..."):
+                result = engine.resolve_roll()
+            st.session_state.last_roll = {
+                "roll": result.roll, "tier": result.tier, "detail": result.detail,
+                "spec": engine.system.dice_spec(),
+            }
+            st.rerun()
+        with c2.form("negotiate", clear_on_submit=True):
+            arg = st.text_input("...or argue for a different approach",
+                                placeholder="e.g. I'd use Fast Talk instead — he's distracted")
+            if st.form_submit_button("Negotiate") and arg.strip():
+                with st.spinner("The Keeper considers..."):
+                    engine.negotiate_roll(arg.strip())
+                st.rerun()
+
+
+def render_play_tab(engine: Engine | None):
+    if err := st.session_state.get("setup_error"):
+        st.error(err)
+    if not engine:
+        if not st.session_state.get("setup_error"):
+            st.info("Pick a campaign in the sidebar and press Start.")
+        return
+    state = engine.state
+    from interface.atmosphere import inject_scene_style, scene_mood
+    active = state.active_character() or state.characters[0]
+    stress_ratio = active.stress / max(active.max_stress, 1)
+    mood = scene_mood(engine.campaign, state.scene_id)
+    inject_scene_style(mood, stress_ratio)
+
+    st.subheader(engine.campaign.title)
+    scene = engine.campaign.scene(state.scene_id) or {}
+    pills = [f":violet-badge[📍 {scene.get('name', '?')}]",
+             f":blue-badge[⏱ turn {state.turn_count}]",
+             f":gray-badge[🎭 {active.name}'s move]"]
+    if state.pending_roll:
+        pills.append(":red-badge[🎲 roll pending]")
+    if state.pending_minigame:
+        pills.append(":orange-badge[🧩 minigame]")
+    if state.god_mode:
+        pills.append(":green-badge[😇 god mode]")
+    if stress_ratio < 0.4:
+        pills.append(f":red-badge[🧠 {active.stress}/{active.max_stress} — fraying]")
+    st.markdown(" ".join(pills))
+
+    if state.summary:
+        with st.expander("📖 The story so far", expanded=False):
+            st.markdown(state.summary)
+
+    render_transcript(state)
+
+    if "last_roll" in st.session_state:
+        lr = st.session_state.pop("last_roll")
+        render_dice_roll(lr["roll"], lr["tier"], lr["detail"], lr["spec"],
+                         key=f"dice_{len(state.dice_log)}")
+
+    if state.pending_roll:
+        render_roll_gate(engine)
+        return
+
+    if state.pending_minigame:
+        from interface.minigames import render_minigame
+        payload = state.pending_minigame
+        result = render_minigame(payload, key=f"mg_{state.turn_count}")
+        if result:
+            st.session_state.last_minigame = {"payload": payload, "result": result}
+            with st.spinner("The Keeper watches..."):
+                engine.resolve_minigame(result)
+            st.rerun()
+        return
+
+    if "last_minigame" in st.session_state:
+        with st.expander("🧩 Last minigame result", expanded=False):
+            from interface.minigames import render_frozen
+            render_frozen(st.session_state.last_minigame)
+
+    humans = state.human_characters()
+    if not humans:
+        st.warning("No human-controlled characters — flip one to human in the sidebar.")
+        return
+    if len(humans) > 1:
+        ids = [c.id for c in humans]
+        default = state.active_character_id if state.active_character_id in ids else ids[0]
+        acting = st.selectbox("Acting as", ids, index=ids.index(default),
+                              format_func=lambda i: state.get_character(i).name)
     else:
-        st.info("👈 Please select a campaign.")
+        acting = humans[0].id
 
-# --------------------
-# TAB 2: SCENARIO ARCHITECT
-# --------------------
-with tab2:
-    st.header("📜 Scenario Architect")
-    st.caption(f"Powered by: {os.getenv('SCRIPTER_PROVIDER', 'Google').upper()}")
-    
-    if "scripter" not in st.session_state:
-        st.session_state.scripter = Scripter() # Uses env vars
-        
-    if "scripter_messages" not in st.session_state:
-        st.session_state.scripter_messages = [{
-            "role": "assistant",
-            "content": "I am the Scripter. Tell me your nightmare..."
-        }]
+    with st.expander("📚 Consult the Archives"):
+        with st.form("research", clear_on_submit=True):
+            q = st.text_input("Research query", placeholder="Elias Corwin, 1835, grave robbery...")
+            web = st.checkbox("Also search the web for flavor", value=False)
+            if st.form_submit_button("Research") and q.strip():
+                with st.spinner("Dust rises from old shelves..."):
+                    engine.consult_researcher(q.strip(), use_web=web)
+                st.rerun()
 
-    for msg in st.session_state.scripter_messages:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
+    prompt = st.chat_input(f"What does {state.get_character(acting).name} do?")
+    if prompt:
+        with st.spinner("The Keeper writes..."):
+            engine.submit_action(acting, prompt)
+        st.rerun()
 
-    if prompt := st.chat_input("Describe your idea..."):
-        st.session_state.scripter_messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.write(prompt)
 
-        with st.spinner("Thinking..."):
-            response = st.session_state.scripter.chat(st.session_state.scripter_messages)
+def render_architect_tab():
+    try:
+        from interface.architect import render_architect
+        render_architect()
+    except ImportError:
+        st.info("Scenario Architect is being rebuilt — coming in the next phase.")
 
-        st.session_state.scripter_messages.append({"role": "assistant", "content": response})
-        with st.chat_message("assistant"):
-            st.write(response)
 
-    st.divider()
-    
-    if st.button("Finalize & Generate Scenario", type="primary"):
-        full_context = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.scripter_messages])
-
-        with st.spinner("Writing the tome..."):
-            try:
-                yaml_content = st.session_state.scripter.generate_campaign(full_context)
-                
-                if "Error" in yaml_content and not yaml_content.strip().startswith("title:"):
-                     st.error(yaml_content)
-                else:
-                    parsed_yaml = yaml.safe_load(yaml_content)
-                    title = parsed_yaml.get('title', f"Scenario_{int(time.time())}")
-                    safe_title = sanitize_filename(title)
-                    filename = f"{safe_title}.yaml"
-                    
-                    filepath = os.path.join(parent_dir, 'data', 'campaigns', filename)
-                    with open(filepath, 'w', encoding='utf-8') as f:
-                        f.write(yaml_content)
-
-                    st.success(f"Scenario saved as: `{filename}`")
-                    st.balloons()
-            except Exception as e:
-                st.error(f"Generation Failed: {e}")
+engine = get_engine()
+render_sidebar(engine)
+tab_play, tab_architect = st.tabs(["🎲 Play", "🏗️ Scenario Architect"])
+with tab_play:
+    render_play_tab(get_engine())
+with tab_architect:
+    render_architect_tab()

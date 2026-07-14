@@ -1,126 +1,91 @@
-# CoC AI Runner: Miskatonic Engine v2.3
+# AI TTRPG Runner (v3)
 
-A Call of Cthulhu (7th Edition) Campaign Runner powered by LLMs (Google Gemini, OpenRouter, or Ollama).
+An LLM-driven tabletop RPG runner with a fully stateful AI Keeper (GM), real dice mechanics,
+and pluggable rule systems — Call of Cthulhu 7e out of the box. Streamlit UI, works with
+Google Gemini, OpenRouter (Grok etc.), or local Ollama.
 
-## Overview
+## Features
 
-CoC AI Runner
+- **Stateful Keeper** — every LLM call carries the full game state: current scene, clues,
+  character sheets, exits, a rolling story summary, and recent chat history. The host follows
+  the plot and remembers what happened.
+- **Real dice** — d100 rolls resolved server-side against your actual skill values
+  (CoC 7e crit/extreme/hard/regular/fumble tiers), with an animated dice tumble in the UI.
+- **Consequences** — Sanity and HP actually change from roll outcomes and scripted events.
+- **Roll gate + negotiation** — the game pauses on a requested roll; roll, or argue for a
+  different skill.
+- **Humans and AI as peers** — every character has a Human/AI toggle, switchable mid-game.
+  Add extra characters anytime (hotseat multiplayer).
+- **AI party modes** — `solo` (companions are narrated NPCs), `keeper` (they act when the
+  Keeper calls on them), `active` (they act every turn).
+- **Pluggable rule systems** — `rules/` registry; CoC 7e and a generic d100 system included.
+- **Researcher** — an in-fiction Archivist that produces diegetic handouts (clippings,
+  journal pages), optionally seeded by a web search.
+- **Scenario Architect** — brainstorm with an AI, then generate a validated campaign YAML
+  that is guaranteed to load and play.
+- **Language selector** — force English, 繁體中文, or 廣東話 (narration in 書面語, dialogue in
+  spoken Cantonese) regardless of what you type; or auto-detect.
+- **In-app model switcher** — sidebar LLM settings; defaults to OpenRouter `x-ai/grok-4.20`,
+  swap provider/model mid-session.
+- **Keeper minigames** — optional dramatic devices the Keeper can invoke when the fiction
+  calls for it: hold a paper to a flame to reveal hidden writing (move the candle yourself),
+  solve a cipher, crack a combination lock, draw tarot omens, or watch a séance spell out a
+  message. Surfaces skin themselves to the setting (parchment / modern / stone / chalk).
+- **God mode** — toggle the Keeper and companions to play along with you and never block
+  your intent; turn it off for an impartial host and companions with their own will.
+- **Atmosphere** — the background shifts with each scene's mood, a red vignette closes in as
+  sanity frays, and browser-synthesized ambience (drone, heartbeat, dice clatter) plays with
+  one click. Drop audio files into `data/audio/` for your own background music.
+- **Undo & export** — rewind the last turn (one step); download the session transcript
+  as Markdown.
 
-An advanced AI-driven Tabletop RPG engine designed for solo investigators. Immerse yourself in Lovecraftian horror with a fully autonomous Keeper (Game Master) and a team of AI Companions that react, investigate, and succumb to madness alongside you.
-
-Key Features:
-
-    Dual-Core Intelligence: Seamlessly switch between cloud power (Google Gemini, Claude 3, GPT-4) for deep roleplay and local models (Ollama/Mistral) for privacy.
-    Trilingual Support: Native fluency in English, Traditional Chinese (Written), and Cantonese (Spoken Dialogue).
-    Stop-and-Roll System: The game pauses for skill checks. Negotiate your approach with the Keeper before committing to a dice roll.
-    AI Party System: Recruit unique investigators (e.g., The Skeptic Doctor, The Paranoid Occultist) who have their own stats, inventory, and fears. They take turns, make decisions, and can go insane.
-    Scenario Architect: A built-in creative suite to generate full-length horror scenarios from a simple prompt.
-
-Powered by Python, Streamlit, and the Cosmic Void.
-
-This project is the core engine for running AI-driven tabletop RPG sessions. It features a **"Dual Logic"** system that adapts complexity based on your chosen model provider:
-
-*   **API Mode (Google/OpenRouter):** Uses complex system prompts for deep roleplay, tactical thinking, and rich atmospheric descriptions.
-*   **Local Mode (Ollama):** Uses simplified prompts optimized for smaller local models (e.g., Mistral, Llama 3) to ensure stability.
-
-### Key Features
-*   **Turn Queue System:** Deterministic turn-based gameplay preventing AI "dogpiling".
-*   **Language Support:** Native support for **English**, **Traditional Chinese (Written)**, and **Cantonese (Spoken)**.
-*   **Isolated Scripter:** Run the Scenario Generator on a high-IQ model (API) while playing the game on a local model.
-*   **Protagonist Focus:** Enhanced narrative that centers on YOU (the Protagonist).
-
----
-
-## 🚀 Quick Start
-
-### 1. Prerequisites
-*   Python 3.10+
-*   API Key (Google Gemini OR OpenRouter) - *Optional if using Ollama exclusively.*
-
-### 2. Installation
+## Quick start
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/Coc_AI_Runner.git
-cd Coc_AI_Runner
-
-# Install dependencies
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
+copy .env.example .env    # then fill in your provider + API key
+streamlit run interface/app.py
 ```
 
-### 3. Configuration (.env)
+Pick a campaign in the sidebar and press **Start**. Saves are automatic
+(`data/saves/<campaign>.save.json`) and survive restarts — even mid-roll.
 
-Rename `.env.example` to `.env` and configure your provider:
+No API key? Set `MOCK_LLM=1` in `.env` to play a short scripted demo offline, or run the
+terminal client: `python cli_play.py --mock`.
 
-```ini
-# --- CORE GAME ENGINE (Keeper & NPCs) ---
-# Options: google, openrouter, ollama
-LLM_PROVIDER=google
-LLM_MODEL=gemini-2.0-flash
+## Architecture
 
-# --- SCENARIO ARCHITECT (Scripter) ---
-# Recommended: Keep this on a high-intelligence model (Google/OpenRouter)
-SCRIPTER_PROVIDER=google
-SCRIPTER_MODEL=gemini-2.0-flash
-
-# --- API KEYS ---
-GOOGLE_API_KEY=your_google_key_here
-OPENROUTER_API_KEY=your_openrouter_key_here
+```
+rules/        pluggable rule systems (base interface, coc7e, basic_d100)
+core/
+  campaign.py    campaign YAML schema v2: load + validation
+  game_state.py  GameState dataclasses + JSON saves
+  keeper.py      LLM context assembly + hybrid prose/JSON output parsing
+  engine.py      UI-agnostic turn loop: roll gate, effects, party turns
+  memory.py      rolling summary compaction
+  llm_client.py  provider abstraction (google / openrouter / ollama)
+agents/       player_agent (AI companions), researcher, scripter
+interface/    app.py (Streamlit), dice.py, minigames.py, atmosphere.py, architect.py
+cli_play.py   terminal REPL (dev harness)
 ```
 
-### 4. Running the Game
+See `ARCHITECTURE.md` for the module map and the contracts that must stay in sync, and
+`LOG.md` for the change history.
+
+Campaigns are YAML files in `data/campaigns/` (see `the_haunting.yaml` for the schema:
+scenes with ids, clues with skill/difficulty/reveals, stress_events, exits).
+
+## Tests
+
+All offline, no API key needed:
 
 ```bash
-# Start the Streamlit Interface
-python -m streamlit run interface/app.py
+python test_rules.py
+python test_keeper_parser.py
+python test_engine.py
+python test_party_modes.py
+python test_memory.py
+python test_scripter.py
 ```
-
----
-
-## 🎮 How to Play
-
-1.  **Select a Campaign:** Choose a YAML scenario from the sidebar in the Streamlit interface.
-2.  **Configure your Party:** (If the scenario includes AI companions, they will load automatically).
-3.  **Game Flow:**
-    *   **Action Phase:** Describe your actions to the Keeper. Be clear about your intentions.
-    *   **NPC Phase:** The AI companions will react to your actions.
-    *   **React and Explore:** Listen carefully to the Keeper's descriptions and plan your next move!
-
-
-## 🧠 Model Setup Guide
-
-### Option A: Google Gemini (Recommended for Best Experience)
-1.  Get a key from [Google AI Studio](https://aistudio.google.com/).
-2.  Set `LLM_PROVIDER=google` and `LLM_MODEL=gemini-2.0-flash`.
-
-### Option B: OpenRouter (Access Claude, GPT-4, Mistral Large)
-1.  Get a key from [OpenRouter](https://openrouter.ai/).
-2.  Set `LLM_PROVIDER=openrouter`.
-3.  Set `LLM_MODEL=provider/model-name` (e.g., `mistralai/mistral-large`).
-
-### Option C: Ollama (Local & Private)
-1.  Install [Ollama](https://ollama.com/).
-2.  Pull a model: `ollama pull mistral`
-3.  Set `LLM_PROVIDER=ollama` and `LLM_MODEL=mistral`.
-4.  *Note: The engine automatically switches to "Simple Mode" prompts for better stability.*
-
-### Troubleshooting
-*   **Connection Errors:**
-    *   Verify your API keys are correct in `.env`.
-    *   Check your network connection and firewall settings.
-    *   Ensure your OpenRouter account has sufficient credits.
-*   **Ollama:**
-    *   Make sure Ollama is running (`ollama serve`).
-    *   Confirm you have pulled the model (`ollama pull mistral`).
-
----
-
-## 📂 Project Structure
-
-*   `core/`: Core game logic (Keeper, Rules, Dice).
-*   `agents/`: AI Personalities (PlayerAgent, Scripter).
-*   `interface/`: Streamlit UI code.
-*   `data/`: Campaign YAML files and Save slots.
-
-## License
-MIT License.
