@@ -129,6 +129,29 @@ sequencing confirmed in-browser: Keeper reply on screen while the companion was 
   now often defers via characters_act); not 100% — prompt-level only, since real NPCs share the
   dialogue channel and can't be regex-stripped. Cinematic unchanged (Keeper authors companions).
 
+**Protagonist per-campaign + dice-honesty pass (2026-07-15):**
+- Setting-appropriate protagonist wired end to end: scripter emits a `protagonist` block with
+  stats matching the rule system (new `stat_note`: d20 modifiers vs 0-100); `Campaign.protagonist`;
+  `new_game` prefers it, falls back to protagonist.yaml. Sample the_haunting gained Eleanor Ash.
+  Patched the live 深淵的蜜語 (wfrp Slaanesh) campaign + its save so the player is 審判官艾德里安·
+  凱爾 with 40k gear/skills instead of the generic CoC "Player" (kept id=player so progress + refs
+  survive; Resume to load). `test_protagonist.py`.
+- Authority clause strengthened: in player mode the Keeper is now explicitly barred from narrating
+  a protected companion's feelings/breathing/expressions/trembling (not just their dialogue) —
+  grok was reading body-language as "environment". Cinematic/solo untouched (verified: cinematic =
+  Keeper voices companions as before; player = restrained).
+- DICE HONESTY FIX: in a long cinematic combat the Keeper stopped emitting roll_request and began
+  hand-waving outcomes — even writing fake "d100=47 → 成功" in prose (a hallucination; it cannot
+  roll). Added a hard CONDUCT rule: the Keeper never rolls, never writes a die value/target/verdict,
+  never invents "hidden" rolls; consequential uncertain actions MUST emit roll_request and end at
+  the tension. OOC prompt likewise refuses to fake dice. Live grok-4.20 check: fabricated dice gone
+  (0/3 trials faked); real Weapon Skill roll_request fires for genuine attacks. Note: still model-
+  dependent — it may skip a roll it judges a foregone conclusion (e.g. striking an intangible
+  illusion), which is a defensible GM call, not the old fakery.
+
+**Docs rebrand (2026-07-15):** README/ARCHITECTURE/CHANGELOG rewritten as "AI TTRPG Runner"
+(multi-system: CoC 7e / D&D 5e / WFRP / basic d100). Repo name/local path/remote left as-is.
+
 **Authority clause strengthened (2026-07-15, follow-up):**
 - Live WFRP/40k session: companions themselves were fine in player mode, but the KEEPER still
   narrated their inner states ("breathing quickened", "eyes betrayed unease"). The clause forbade
