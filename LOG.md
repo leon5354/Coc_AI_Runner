@@ -152,6 +152,30 @@ sequencing confirmed in-browser: Keeper reply on screen while the companion was 
 **Docs rebrand (2026-07-15):** README/ARCHITECTURE/CHANGELOG rewritten as "AI TTRPG Runner"
 (multi-system: CoC 7e / D&D 5e / WFRP / basic d100). Repo name/local path/remote left as-is.
 
+**Minigame overhaul + roll-chain guard (2026-07-15):**
+- BUG (theme never switched / games seemed dead): the minigame widget key was `mg_{turn_count}`,
+  which repeats when a minigame fires outside submit_action — the OLD CCv2 component (old skin,
+  old text, dataset.built guard) was reused. New `GameState.minigame_count` increments per launch
+  via `engine.launch_minigame()`, which also injects a per-setting default skin
+  (`minigames_catalog.DEFAULT_SKIN`) when the keeper omits one. Contract now marks skin REQUIRED.
+- Keeper minigame contract now leads with an AVAILABLE DEVICES menu + "vary, never repeat twice
+  in a row" — addresses the host always picking burn/cipher.
+- burn_reveal upgrades: `difficulty` (easy/normal/hard → flame radius + coverage) and `pages`
+  (multi-page documents, revealed page by page, page counter in-component).
+- New minigames: `wire_cut` (one-shot wire choice, native) and `memory_echo` (Simon-style CCv2
+  sigil pattern). combination_lock now fits 40k (keypads); seance fits 40k (astropathic echo).
+- 🧪 Minigame tester (sidebar): one button per game launches its catalog `sample` through the
+  real engine — QA without begging the keeper. All 9 games verified in-browser end-to-end
+  (burn multi-page + skin, cipher solve, lock open, duel, glyph order, echo board, séance
+  spelling, tarot draw, wire cut) with keeper narration after each.
+- NEW FINDING from that testing: the dice-honesty rule made grok CHAIN roll_requests off roll
+  outcomes (3+ consecutive Dodge gates without player input). Two-layer fix: CONDUCT now says
+  one player action = one roll (max one forced follow-up), and an engine chain guard
+  (`GameState.rolls_since_action`, reset on action/negotiate/minigame result) hard-declines a
+  3rd consecutive roll with a dice-log note. `test_roll_chain.py`.
+- Gotcha (again): Streamlit does NOT reliably hot-reload imported core modules — restart the
+  server after editing engine/keeper, not just Resume.
+
 **Authority clause strengthened (2026-07-15, follow-up):**
 - Live WFRP/40k session: companions themselves were fine in player mode, but the KEEPER still
   narrated their inner states ("breathing quickened", "eyes betrayed unease"). The clause forbade

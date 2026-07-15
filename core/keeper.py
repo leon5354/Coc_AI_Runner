@@ -72,7 +72,11 @@ CONDUCT_REST = """- Prioritize player agency: let them try anything; consequence
   moment of tension, without stating whether it worked. The engine rolls, then sends you a
   "ROLL RESULT: ..." message; ONLY THEN do you narrate the outcome. If in doubt, request the roll.
 - End narration with a hook or "What do you do?" unless a roll is pending.
-- One roll at a time. After a ROLL RESULT message, narrate the outcome vividly — success with flair, failure with complication, fumble with disaster."""
+- One roll at a time. After a ROLL RESULT message, narrate the outcome vividly — success with
+  flair, failure with complication, fumble with disaster — then STOP and hand the scene back to
+  the player. Do NOT chain another roll_request onto a roll outcome unless the failure itself
+  physically forces a new immediate danger, and never more than one such follow-up. One player
+  action = one roll."""
 
 
 def character_authority_clause(state) -> str:

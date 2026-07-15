@@ -65,6 +65,8 @@ class GameState:
     messages_archive: list = field(default_factory=list)  # compacted out, UI-only
     pending_roll: dict = None        # {character_id, skill, target, difficulty, reason}
     pending_minigame: dict = None    # {type, ...payload} set by the keeper's control block
+    minigame_count: int = 0          # total minigames launched — gives each a unique widget key
+    rolls_since_action: int = 0      # human rolls since the player last acted (chain guard)
     dice_log: list = field(default_factory=list)
 
     # --- lookups ---

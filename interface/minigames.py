@@ -23,7 +23,7 @@ _BURN_HTML = """
 <div class="paper-wrap">
   <div class="paper" id="paper"></div>
   <div class="flame" id="flame">🕯️</div>
-  <div class="hint">Move the candle across the surface…</div>
+  <div class="hint">Move the candle across the surface… <span id="pagelabel"></span></div>
 </div>
 """
 
@@ -49,6 +49,7 @@ export default function (component) {
   const paper = parentElement.querySelector("#paper")
   const flame = parentElement.querySelector("#flame")
   const wrap = parentElement.querySelector(".paper-wrap")
+  const pageLabel = parentElement.querySelector("#pagelabel")
   if (!paper || paper.dataset.built) return
   paper.dataset.built = "1"
 
@@ -58,37 +59,54 @@ export default function (component) {
   paper.style.fontFamily = skin.font || "Georgia, serif"
   const hotColor = skin.hot || "#58230a"
 
-  const text = (data && data.text) || ""
-  const spans = []
-  for (const ch of text) {
-    const s = document.createElement("span")
-    s.textContent = ch
-    paper.appendChild(s)
-    spans.push(s)
+  // difficulty: flame radius^2 and coverage needed to finish a page
+  const diff = { easy:   { r2: 4200, need: 0.75 },
+                 normal: { r2: 2600, need: 0.85 },
+                 hard:   { r2: 1100, need: 0.93 } }[(data && data.difficulty) || "normal"]
+             || { r2: 2600, need: 0.85 }
+
+  const pages = (data && data.pages && data.pages.length) ? data.pages : [(data && data.text) || ""]
+  let pageIdx = 0, spans = [], revealed = 0, pageDone = false
+
+  function loadPage(i) {
+    paper.innerHTML = ""
+    spans = []; revealed = 0; pageDone = false
+    for (const ch of pages[i]) {
+      const s = document.createElement("span")
+      s.textContent = ch
+      paper.appendChild(s)
+      spans.push(s)
+    }
+    if (pageLabel) pageLabel.textContent = pages.length > 1 ? `page ${i + 1} / ${pages.length}` : ""
   }
-  let revealed = 0, done = false
+  loadPage(0)
 
   wrap.onmousemove = (e) => {
     const wr = wrap.getBoundingClientRect()
     flame.style.display = "block"
     flame.style.left = (e.clientX - wr.left) + "px"
     flame.style.top = (e.clientY - wr.top) + "px"
+    if (pageDone) return
     for (const s of spans) {
       if (s.classList.contains("hot")) continue
       const r = s.getBoundingClientRect()
       const dx = e.clientX - (r.left + r.width / 2)
       const dy = e.clientY - (r.top + r.height / 2)
-      if (dx * dx + dy * dy < 2600) {
+      if (dx * dx + dy * dy < diff.r2) {
         s.classList.add("hot")
         s.style.color = hotColor
         s.style.textShadow = `0 0 6px ${hotColor}66`
         revealed++
       }
     }
-    if (!done && text.length > 0 && revealed >= spans.length * 0.85) {
-      done = true
+    if (spans.length > 0 && revealed >= spans.length * diff.need) {
+      pageDone = true
       for (const s of spans) { s.classList.add("hot"); s.style.color = hotColor }
-      setTriggerValue("revealed", true)
+      if (pageIdx + 1 < pages.length) {
+        setTimeout(() => { pageIdx++; loadPage(pageIdx) }, 1200)   // char the page, turn to next
+      } else {
+        setTriggerValue("revealed", true)
+      }
     }
   }
   wrap.onmouseleave = () => { flame.style.display = "none" }
@@ -102,10 +120,14 @@ _burn_component = st.components.v2.component(
 def render_burn_reveal(payload: dict, key: str):
     st.markdown(f"### 🕯️ {payload.get('context', 'A suspicious blank surface...')}")
     skin = SKINS.get(payload.get("skin", "parchment"), SKINS["parchment"])
-    result = _burn_component(data={"text": payload.get("hidden_text", ""), "skin": skin},
-                             key=key, on_revealed_change=lambda: None)
+    pages = [str(p) for p in payload.get("pages") or [] if str(p).strip()]
+    full_text = " / ".join(pages) if pages else payload.get("hidden_text", "")
+    result = _burn_component(
+        data={"text": payload.get("hidden_text", ""), "pages": pages, "skin": skin,
+              "difficulty": payload.get("difficulty", "normal")},
+        key=key, on_revealed_change=lambda: None)
     if result.revealed or st.button("Expose the whole surface to the heat", key=f"{key}_skip"):
-        return f"The heat reveals hidden writing: \"{payload.get('hidden_text', '')}\""
+        return f"The heat reveals hidden writing: \"{full_text}\""
     return None
 
 
@@ -360,13 +382,147 @@ def render_dice_duel(payload: dict, key: str):
     return None
 
 
+# --- wire cut: one chance, choose the right line ---
+
+_WIRE_COLORS = {"red": "#d9534f", "blue": "#4a7fd4", "green": "#4faf6b", "yellow": "#d4b74a",
+                "black": "#555", "white": "#ddd", "purple": "#9a6bd4", "orange": "#d4854a"}
+
+
+def render_wire_cut(payload: dict, key: str):
+    wires = [str(w).lower() for w in payload.get("wires") or []]
+    correct = str(payload.get("correct", "")).lower()
+    if not wires or correct not in wires:
+        return "(wire_cut had no valid wires — skipped)"
+    st.markdown("### ✂️ One cut. Choose.")
+    if payload.get("clue"):
+        st.caption(f"🧩 {payload['clue']}")
+    st.markdown(
+        "<div style='display:flex;gap:6px;margin:6px 0 14px'>" +
+        "".join(f"<div style='flex:1;height:10px;border-radius:5px;background:"
+                f"{_WIRE_COLORS.get(w, '#888')}'></div>" for w in wires) +
+        "</div>", unsafe_allow_html=True)
+    cols = st.columns(len(wires))
+    for col, w in zip(cols, wires):
+        if col.button(f"✂️ {w}", key=f"{key}_wire_{w}", width="stretch"):
+            if w == correct:
+                return f"The player cut the {w} wire — CORRECT. The device goes quiet."
+            return (f"The player cut the {w} wire — WRONG (the correct one was {correct}). "
+                    f"Consequence: {payload.get('consequence', 'the mechanism triggers')}")
+    if st.button("Back away without cutting", key=f"{key}_wire_quit"):
+        return "The player backed away without cutting any wire"
+    return None
+
+
+# --- memory echo: watch the pattern flash, repeat it (Simon) ---
+
+_ECHO_HTML = """
+<div class="echo-board">
+  <div class="echo-status" id="status">Watch…</div>
+  <div class="echo-grid" id="grid"></div>
+</div>
+"""
+
+_ECHO_CSS = """
+.echo-board { text-align: center; padding: 8px 0; font-family: Georgia, serif; }
+.echo-status { color: var(--st-text-color, #ccc); opacity: .75; margin-bottom: 10px; font-size: .9em; }
+.echo-grid { display: flex; gap: 14px; justify-content: center; }
+.sigil { width: 64px; height: 64px; border-radius: 12px; display: flex; align-items: center;
+  justify-content: center; font-size: 1.8em; cursor: pointer; user-select: none;
+  background: #1c1a24; border: 1px solid #4a3a5a; color: #8a7fa6;
+  transition: all .15s ease; }
+.sigil.lit { background: #3d2f5c; color: #e8d8ff; border-color: #a88fd4;
+  box-shadow: 0 0 22px rgba(168,143,212,.6); transform: scale(1.12); }
+.sigil.dead { opacity: .35; cursor: default; }
+"""
+
+_ECHO_JS = """
+export default function (component) {
+  const { data, parentElement, setTriggerValue } = component
+  const grid = parentElement.querySelector("#grid")
+  const status = parentElement.querySelector("#status")
+  if (!grid || grid.dataset.built) return
+  grid.dataset.built = "1"
+
+  const SYMBOLS = ["🜏", "☿", "🜍", "🝓", "🜚", "⚸"]
+  const length = Math.min(6, Math.max(3, (data && data.length) || 4))
+  const maxAttempts = Math.max(1, (data && data.attempts) || 2)
+  const cells = SYMBOLS.slice(0, 4)
+  const seq = Array.from({length}, () => Math.floor(Math.random() * cells.length))
+
+  const els = cells.map((sym) => {
+    const d = document.createElement("div")
+    d.className = "sigil"; d.textContent = sym
+    grid.appendChild(d)
+    return d
+  })
+
+  let accepting = false, pos = 0, attempts = 0
+  function flash(i, ms) {
+    els[i].classList.add("lit")
+    setTimeout(() => els[i].classList.remove("lit"), ms)
+  }
+  function playback() {
+    accepting = false; pos = 0
+    status.textContent = "Watch…"
+    seq.forEach((s, n) => setTimeout(() => flash(s, 420), 650 * (n + 1)))
+    setTimeout(() => { accepting = true; status.textContent = "Repeat the sequence." },
+               650 * (seq.length + 1))
+  }
+  els.forEach((el, i) => {
+    el.onclick = () => {
+      if (!accepting) return
+      flash(i, 200)
+      if (i === seq[pos]) {
+        pos++
+        if (pos >= seq.length) {
+          accepting = false
+          status.textContent = "The pattern answers."
+          setTriggerValue("done", "success")
+        }
+      } else {
+        attempts++
+        if (attempts >= maxAttempts) {
+          accepting = false
+          els.forEach(e => e.classList.add("dead"))
+          status.textContent = "The pattern fades, unanswered."
+          setTriggerValue("done", "failure")
+        } else {
+          status.textContent = "Wrong — it begins again…"
+          setTimeout(playback, 900)
+        }
+      }
+    }
+  })
+  setTimeout(playback, 400)
+}
+"""
+
+_echo_component = st.components.v2.component("memory_echo", html=_ECHO_HTML, css=_ECHO_CSS, js=_ECHO_JS)
+
+
+def render_memory_echo(payload: dict, key: str):
+    st.markdown(f"### ✨ {payload.get('context', 'A pattern flashes — remember it.')}")
+    result = _echo_component(
+        data={"length": int(payload.get("length", 4)), "attempts": int(payload.get("attempts", 2))},
+        key=key, on_done_change=lambda: None)
+    if result.done == "success":
+        return "The player repeated the pattern PERFECTLY — the mechanism yields"
+    if result.done == "failure":
+        return "The player FAILED to repeat the pattern — the echo fades and the way stays shut"
+    if st.button("Step away from the pattern", key=f"{key}_echo_quit"):
+        return "The player stepped away without answering the pattern"
+    return None
+
+
 RENDERERS = {"burn_reveal": render_burn_reveal, "cipher": render_cipher, "seance": render_seance,
              "combination_lock": render_combination_lock, "tarot_draw": render_tarot_draw,
-             "glyph_sequence": render_glyph_sequence, "dice_duel": render_dice_duel}
+             "glyph_sequence": render_glyph_sequence, "dice_duel": render_dice_duel,
+             "wire_cut": render_wire_cut, "memory_echo": render_memory_echo}
 
 ICONS = {"burn_reveal": "🕯️", "cipher": "🔏", "seance": "☩",
          "combination_lock": "🔒", "tarot_draw": "🃏",
-         "glyph_sequence": "✴️", "dice_duel": "🎲"}
+         "glyph_sequence": "✴️", "dice_duel": "🎲",
+         "wire_cut": "✂️", "memory_echo": "✨"}
 
 
 def render_minigame(payload: dict, key: str):

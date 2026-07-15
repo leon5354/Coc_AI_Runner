@@ -123,6 +123,7 @@ class Engine:
         if char:
             self.state.active_character_id = character_id
         self.state.turn_count += 1
+        self.state.rolls_since_action = 0
         self.state.messages.append({"role": "player", "name": char.name if char else None, "content": text})
         self.state.save()
         return text
@@ -187,15 +188,27 @@ class Engine:
     def begin_negotiate(self, text: str) -> str:
         """Player argues for a different skill/approach instead of rolling."""
         self._take_snapshot()
+        self.state.rolls_since_action = 0
         char = self.state.get_character(self.state.pending_roll["character_id"]) if self.state.pending_roll else None
         self.state.pending_roll = None
         self.state.messages.append({"role": "player", "name": char.name if char else None, "content": text})
         self.state.save()
         return f"(The player negotiates the pending roll instead of rolling): {text}"
 
+    def launch_minigame(self, payload: dict):
+        """Set the minigame gate: unique widget key + setting-appropriate default skin."""
+        from core import minigames_catalog as mc
+        payload = dict(payload)
+        if payload.get("type") == "burn_reveal" and not payload.get("skin"):
+            payload["skin"] = mc.DEFAULT_SKIN.get(mc.resolve_setting(self.campaign), "modern")
+        self.state.minigame_count += 1
+        self.state.pending_minigame = payload
+        self.state.save()
+
     def begin_minigame_result(self, result_text: str) -> str:
         """Record the outcome of a minigame; the keeper picks up from it."""
         self._take_snapshot()
+        self.state.rolls_since_action = 0
         self.state.pending_minigame = None
         self.state.dice_log.append(f"[minigame] {result_text}")
         self.state.messages.append({"role": "player", "content": f"MINIGAME RESULT: {result_text}"})
@@ -276,8 +289,7 @@ class Engine:
             self.state.save()
 
             if ctrl.minigame and not ctrl.roll_request:
-                self.state.pending_minigame = ctrl.minigame
-                self.state.save()
+                self.launch_minigame(ctrl.minigame)
                 return  # gate: wait for the player to play it out
 
             if not ctrl.roll_request:
@@ -285,6 +297,14 @@ class Engine:
             char, skill, target = self._resolve_roll_target(ctrl.roll_request)
             difficulty = ctrl.roll_request.get("difficulty", "regular")
             if char.controller == "human" and char.status == "active":
+                if self.state.rolls_since_action >= 2:
+                    # chain guard: one player action shouldn't spiral into endless keeper rolls
+                    self.state.dice_log.append(
+                        f"[guard] keeper wanted a 3rd consecutive roll ({skill}) — declined, "
+                        "narration stands")
+                    self.state.save()
+                    break
+                self.state.rolls_since_action += 1
                 self.state.pending_roll = {
                     "character_id": char.id, "skill": skill, "target": target,
                     "difficulty": difficulty, "reason": ctrl.roll_request.get("reason", ""),

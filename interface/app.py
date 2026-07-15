@@ -262,6 +262,17 @@ def render_sidebar(engine: Engine | None):
             for line in reversed(state.dice_log[-25:]):
                 st.caption(line)
 
+        with st.expander("🧪 Minigame tester"):
+            from core import minigames_catalog as mc
+            st.caption("Launch any minigame directly (no Keeper) to try it out. The result is "
+                       "fed back into the story like a real one.")
+            busy = state.pending_minigame is not None
+            for g in sorted(mc.types()):
+                if st.button(mc.CATALOG[g]["label"], key=f"mg_test_{g}",
+                             disabled=busy, width="stretch"):
+                    engine.launch_minigame(mc.sample(g))
+                    st.rerun()
+
         c1, c2 = st.columns(2)
         if c1.button("↩ Undo turn", width="stretch",
                      help="Rewind to before the last action / roll / minigame (one step)"):
@@ -410,7 +421,7 @@ def render_play_tab(engine: Engine | None):
     if state.pending_minigame:
         from interface.minigames import render_minigame
         payload = state.pending_minigame
-        result = render_minigame(payload, key=f"mg_{state.turn_count}")
+        result = render_minigame(payload, key=f"mg_{state.minigame_count}")
         if result:
             st.session_state.last_minigame = {"payload": payload, "result": result}
             start_turn(engine.keeper_steps(engine.begin_minigame_result(result)),
