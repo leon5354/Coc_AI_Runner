@@ -128,3 +128,14 @@ sequencing confirmed in-browser: Keeper reply on screen while the companion was 
 - `test_authority.py` covers the matrix. Live check: player mode cut the ventriloquism (Keeper
   now often defers via characters_act); not 100% — prompt-level only, since real NPCs share the
   dialogue channel and can't be regex-stripped. Cinematic unchanged (Keeper authors companions).
+
+**Authority clause strengthened (2026-07-15, follow-up):**
+- Live WFRP/40k session: companions themselves were fine in player mode, but the KEEPER still
+  narrated their inner states ("breathing quickened", "eyes betrayed unease"). The clause forbade
+  their dialogue/decisions but grok read body-language as environment. Extended the player-mode
+  clause to forbid ZERO described inner states — feelings, thoughts, breathing, heartbeat,
+  expressions, blushing, trembling — the Keeper may only describe what the world/NPCs do around
+  them. Also diagnosed the user's confusion: their earlier elevator save was `companion_style:
+  cinematic` (novels are correct there); the Slaanesh save is `player` and companions were already
+  restrained. Two-and-a-half campaigns predate the protagonist fix (generic "Player"/CoC sheet);
+  fixed the WFRP one's campaign + live save to the intended Inquisitor (Cool 65, bolt pistol).

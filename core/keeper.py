@@ -87,10 +87,13 @@ def character_authority_clause(state) -> str:
                      "player has ALREADY declared, but never invent their dialogue, decisions, or feelings.")
     if treat_ai_as_players and ai:
         lines.append(f"- The companions {', '.join(ai)} are AI PLAYERS this session — NOT NPCs you voice. "
-                     "Give them ZERO lines of dialogue and ZERO invented actions in your narration. "
-                     "If you want one of them to react, speak, or act, DO NOT write it yourself — instead "
-                     "put their exact id in \"characters_act\" and stop; their own player then takes a turn "
-                     "and supplies their words. Voicing them yourself is the single worst mistake you can make.")
+                     "In your narration give them ZERO dialogue, ZERO invented actions, AND ZERO described "
+                     "inner states — do not describe their feelings, thoughts, breathing, heartbeat, "
+                     "expressions, blushing, trembling, or any emotional or bodily reaction. You cannot see "
+                     "inside them and their body is theirs to portray, not yours. Refer to them only by what "
+                     "the world and your own NPCs do TO or AROUND them. If you want one to react, speak, or "
+                     "act, DO NOT write it — put their exact id in \"characters_act\" and stop; their own "
+                     "player then takes a turn. Voicing or puppeteering them is the single worst mistake you can make.")
     if npc_companions:
         lines.append(f"- You MAY voice these companions as NPCs (speak and act for them naturally): "
                      f"{', '.join(npc_companions)}.")
