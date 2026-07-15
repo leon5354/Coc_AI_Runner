@@ -32,7 +32,8 @@ Streamlit UI (interface/app.py)
 | `core/campaign.py` | Schema v2 load + validate | `validate()` returns ALL problems; optional fields: `tone`, `npcs`, `escalation`, scene `keeper_notes` |
 | `core/memory.py` | Rolling summary | compact >30 msgs; per-character arc lines; hard facts live in state block, not summary |
 | `core/llm_client.py` | Provider abstraction | `chat(messages, system_prompt)`; openrouter/google/ollama; call log → `data/logs/llm.log` |
-| `rules/` | Pluggable rule systems | `RuleSystem` ABC; registry in `__init__`; `coc7e` (has_stress) + `basic_d100` |
+| `rules/` | Pluggable rule systems | `RuleSystem` ABC; registry in `__init__`; `coc7e`/`wfrp` (has_stress) + `dnd5e`/`basic_d100`. `skill_value` semantics are per-system (0-100 for d100 systems, d20 modifier for dnd5e) — a campaign's sheets must match its `rule_system` |
+| `agents/lore.py` | Real-setting canon fetch | `SETTING_WIKIS` (MediaWiki api.php per IP); `fetch_canon(setting, concept, llm)` at GENERATION only, baked into campaign `canon:`; extracts→parse-HTML fallback; degrades to "" on any failure |
 | `agents/player_agent.py` | AI party members | THOUGHT/ACTION output; private_thoughts persist on `CharacterState` |
 | `agents/researcher.py` | Diegetic lore handouts | uses `util_llm`; optional DDG web flavor |
 | `agents/scripter.py` | Campaign generator | schema v2 JSON via json_mode; validate + one repair round-trip |
@@ -45,7 +46,11 @@ Streamlit UI (interface/app.py)
 ## Contracts to keep in sync
 
 1. **Keeper output contract** (`keeper.py OUTPUT_CONTRACT`) ⟷ `Control` fields ⟷ `engine._apply_effects`.
-2. **Minigame types**: `keeper.MINIGAME_TYPES` ⟷ `minigames.RENDERERS` ⟷ contract text.
+2. **Minigame types**: `core/minigames_catalog.py` is the single source of truth (type, label,
+   per-setting fit, keeper contract text). `keeper.MINIGAME_TYPES` and the prompt's minigame
+   section derive from it (filtered by the campaign's setting); `interface/minigames.RENDERERS`
+   must cover exactly the catalog — `test_minigame_catalog.py` enforces parity. To add a
+   minigame: 1 catalog entry + 1 renderer, done.
 3. **Campaign schema**: `campaign.validate` ⟷ `scripter.ARCHITECT_INSTRUCTION_TEMPLATE` ⟷ sample `the_haunting.yaml`.
 4. **Save format**: `GameState` fields — add with defaults only (old saves must keep loading).
 5. **Live turn loop**: `engine.keeper_steps()` yields ⟷ `app.advance_turn()` runs one beat per

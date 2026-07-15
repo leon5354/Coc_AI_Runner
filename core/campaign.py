@@ -37,6 +37,8 @@ class Campaign:
     @property
     def ai_party(self): return self.data.get("ai_party", []) or []
     @property
+    def protagonist(self): return self.data.get("protagonist") or None
+    @property
     def scenes(self): return self.data.get("scenes", [])
 
     def scene(self, scene_id: str):

@@ -46,6 +46,28 @@ endings:
     description: Corwin kills or possesses the investigators. The house wins.
 protagonist_hints: >
   The protagonist answered Knott's advertisement for a "discreet inquiry agent".
+protagonist:
+  name: Eleanor Ash
+  gender: Female
+  occupation: Private inquiry agent, Boston, 1925
+  personality: Rational but stubborn; keeps reading when she should run.
+  backstory: >
+    A sharp-witted analyst drawn to the occult after a childhood night her family
+    never spoke of again. She answered Knott's advertisement for discreet work.
+  stats:
+    HP: 12
+    Stress: 60
+    Skills:
+      Spot Hidden: 70
+      Psychology: 60
+      Library Use: 55
+      Occult: 40
+      Persuade: 45
+  inventory:
+    - Notebook & pen
+    - Electric torch
+    - Brass lighter
+    - Snub-nose revolver
 ai_party:
   - name: Prof. Warren Vale
     gender: Male

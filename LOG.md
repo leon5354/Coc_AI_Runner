@@ -53,5 +53,78 @@
 - New `test_live_turn.py`: asserts beats arrive separately (transcript grows between yields),
   AI rolls are their own beat, human rolls still gate, and backgrounds reach the prompt.
 
+**Protagonist + player-mode investigation (2026-07-15):**
+- BUG: the player character was ALWAYS the generic `data/agents/protagonist.yaml` ("Player", CoC
+  skills, Notebook/Flashlight/Smartphone) regardless of the generated campaign — a Warhammer game
+  still gave you a smartphone. The scripter generated `ai_party` but never a protagonist.
+- Fix: scripter now emits a `protagonist` block (name/occupation/personality/backstory/stats/
+  inventory) matching the setting + rule system (new `stat_note` tells it d20 modifiers vs 0-100
+  percentages); `campaign.protagonist` property; `new_game` uses the campaign's protagonist and
+  only falls back to protagonist.yaml when absent. Sample `the_haunting.yaml` gains a protagonist
+  (Eleanor Ash). `test_protagonist.py` covers it. Tests that hardcoded "player"/"Player" now read
+  the protagonist id/name dynamically.
+- Player mode was NOT broken: the save confirmed `companion_style: player` and the code selects
+  the player register correctly (proved deterministically). The cinematic feel came from (a) a
+  stale cached engine — editing files needs a **Restart** to rebuild `st.session_state.engine`,
+  the Keeper instance especially — and (b) the Keeper RE-narrating companion actions in prose.
+  Fixed (b): the companion wrap-up now tells the Keeper not to repeat/re-quote/expand what the
+  companions already said (extra-tight in player mode) — only add the world's reaction + rolls.
+
 **Known state:** all offline tests pass; live-LLM play verified with OpenRouter (beat-by-beat
 sequencing confirmed in-browser: Keeper reply on screen while the companion was still thinking).
+
+**Crash fix + memory/talk + IP/lore pass (same day):**
+- CRASH FIX: non-ASCII character names (e.g. Chinese) all slugged to "char" → duplicate Streamlit
+  widget keys → app crashed on load. `slugify` now keeps unicode word chars; `unique_id()` dedupes;
+  `Engine._repair_character_ids()` fixes old broken saves on load. Regression: `test_id_collision.py`.
+- Character memory (feels "real"): per-character `memory_summary` (first-person chronicle) +
+  `relationships` (private opinions), distilled by the cheap util model only when `private_thoughts`
+  overflow `THOUGHT_WINDOW` (12). All persist on CharacterState. Sidebar "🧠 Inner life" viewer.
+- Talk vs Act vs Ask-the-Keeper: `engine.begin_talk/talk_steps` (converse, no turn/dice/plot),
+  `engine.ask_keeper_ooc` (OOC Q&A, changes nothing; tagged so keeper won't treat it as story).
+  Play-tab segmented control picks the mode. New `ooc` message role.
+- Minigame difficulty is host-set: cipher `attempts`/`hint_after`/`allow_giveup`, lock `attempts`
+  (all optional in the keeper contract; sensible defaults).
+- New rule systems: `dnd5e` (d20+mod vs DC, advantage/disadvantage via bonus/penalty dice, no
+  stress) and `wfrp` (d100 roll-under + SL, doubles crit/fumble, Resolve stress pool). NOTE:
+  `skill_value` is a d20 modifier for dnd5e vs 0-100 for d100 systems.
+- Real-IP lore: `agents/lore.py` fetches official-wiki canon (Fandom/Lexicanum MediaWiki) at
+  GENERATION time, bakes it into campaign `canon:`; keeper reads it in the brief; play needs no
+  lookups. Architect tab has a Setting/IP picker. Live-verified vs Forgotten Realms / Cthulhu /
+  Warhammer wikis (extracts prop absent on Fandom → action=parse HTML fallback). Trademarked
+  settings = personal play only.
+- Tests: `test_new_systems.py`, `test_memory_character.py`, `test_id_collision.py`.
+
+**Minigame catalog pass (same day):**
+- `core/minigames_catalog.py` = single source of truth: type → label, per-setting fit ("*" or
+  setting keys), keeper contract text. Keeper's minigame contract is now built per campaign
+  setting (e.g. no combination locks offered in Forgotten Realms; glyph rituals are).
+- New minigames: `glyph_sequence` (activate sigils in order — arcane locks/wards for the fantasy
+  IPs; wrong glyph resets, host-set attempts) and `dice_duel` (best-of-N tavern gamble vs an NPC,
+  bold d10 / steady d6+2 choice each round; universal).
+- Progress tracking: "🧩 Minigame coverage by setting" table in the Architect tab, generated
+  from the catalog (never stale). `test_minigame_catalog.py` enforces catalog ⟷ renderers ⟷
+  keeper parity and setting filtering.
+
+**Companion register fix (same day):**
+- Problem from live Cantonese play: AI companions wrote novelistic third-person prose
+  (self-narrating involuntary detail — "搓手指直至指節出血" — and repeating the same tic every
+  turn), not like real tabletop players.
+- Rewrote `player_agent` act-mode guidance: a shared BOUNDARY (control only yourself — never
+  narrate your involuntary body, others' reactions, the room, or the outcome; vary mannerisms)
+  plus two registers via new `GameState.companion_style`: "player" (default — brief intent +
+  quoted dialogue, table voice) and "cinematic" (opt-in richer prose). Sidebar "Companion voice"
+  toggle. Talk-mode SAY tightened to speech-only.
+- Live A/B on grok-4.20 confirmed: player = one action + a line; cinematic = the old prose.
+
+**Keeper authority split (same day):**
+- Problem: the Keeper was ventriloquizing AI companions — inventing their dialogue/actions in its
+  narration before those companions' own agents had a turn (GM speaking for other players).
+- `keeper.character_authority_clause(state)` builds the "who may I voice" rule dynamically:
+  human characters always off-limits; AI companions off-limits too in PLAYER style + non-solo
+  party (they're real players — the Keeper must hand them the turn via `characters_act`, not
+  voice them); the Keeper MAY voice AI companions as NPCs only in solo mode or cinematic style.
+  `CONDUCT` split into dynamic clause + `CONDUCT_REST`; `build_system_prompt(..., state=)`.
+- `test_authority.py` covers the matrix. Live check: player mode cut the ventriloquism (Keeper
+  now often defers via characters_act); not 100% — prompt-level only, since real NPCs share the
+  dialogue channel and can't be regex-stripped. Cinematic unchanged (Keeper authors companions).

@@ -13,23 +13,24 @@ from core import game_state
 game_state.SAVES_DIR = Path(tempfile.mkdtemp())  # keep test saves away from real ones
 
 state = new_game(CAMP)
+pid = state.characters[0].id            # campaign protagonist (setting-defined), not always "player"
 assert state.scene_id == "briefing"
-assert [c.id for c in state.characters] == ["player", "prof_warren_vale"]
+assert state.characters[1].id == "prof_warren_vale"
 assert state.characters[0].controller == "human" and state.characters[1].controller == "ai"
 state.party_mode = "solo"   # keep the mock script deterministic
 
 engine = Engine(state, llm=MockLLM())
 
 # turn 1: plain narration
-engine.submit_action("player", "I ask Knott about the house.")
+engine.submit_action(pid, "I ask Knott about the house.")
 assert state.pending_roll is None
 assert state.messages[-1]["role"] == "keeper" and "folder" in state.messages[-1]["content"]
 
 # turn 2: keeper requests a roll -> gate blocks for human char
-engine.submit_action("player", "I read the tenant letters carefully.")
+engine.submit_action(pid, "I read the tenant letters carefully.")
 pr = state.pending_roll
-assert pr is not None and pr["character_id"] == "player"
-assert pr["skill"] == "Library Use" and pr["target"] == 50   # coerced 'library use' -> sheet skill
+assert pr is not None and pr["character_id"] == pid
+assert pr["skill"] == "Library Use" and pr["target"] == state.characters[0].skills["Library Use"]
 assert pr["difficulty"] == "regular"
 
 # save/reload mid-roll: pending_roll survives
@@ -48,12 +49,12 @@ assert any("Library Use" in line for line in state.dice_log)
 assert any("SAN roll" in line for line in state.dice_log)
 
 # turn 4: scene transition validated against exits
-engine.submit_action("player", "I take the key and go to the house.")
+engine.submit_action(pid, "I take the key and go to the house.")
 assert state.scene_id == "house_ground"
 assert state.visited_scenes == ["briefing", "house_ground"]
 
 # turn 5: minigame gate (mock step 5) then resolution feeds keeper (mock step 6)
-engine.submit_action("player", "I search between the floorboards.")
+engine.submit_action(pid, "I search between the floorboards.")
 assert state.pending_minigame is not None and state.pending_minigame["type"] == "burn_reveal"
 engine.resolve_minigame('The heat reveals hidden writing: "HE COUNTS US WHILE WE SLEEP"')
 assert state.pending_minigame is None
@@ -73,9 +74,9 @@ state.save()
 assert GameState.load(state.save_path()).language == "yue"
 
 # controller switching
-engine.set_controller("player", "ai")
-assert state.get_character("player").controller == "ai"
-engine.set_controller("player", "human")
+engine.set_controller(pid, "ai")
+assert state.get_character(pid).controller == "ai"
+engine.set_controller(pid, "human")
 
 # add character with system defaults
 c = engine.add_character("Second Player", controller="human", player_label="Player 2")

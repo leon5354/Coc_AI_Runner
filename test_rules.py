@@ -46,7 +46,7 @@ assert new == 0
 assert basic.stress_check(50, "1d4") is None   # no stress mechanic
 
 # registry
-assert rules.available_systems() == ["basic_d100", "coc7e"]
+assert {"basic_d100", "coc7e"} <= set(rules.available_systems())
 try:
     rules.get_system("nope")
     raise AssertionError("should have raised")

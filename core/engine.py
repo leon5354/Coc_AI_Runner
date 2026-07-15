@@ -7,7 +7,7 @@ import yaml
 import rules
 from core import campaign as campaign_mod
 from core import memory
-from core.game_state import CharacterState, GameState, slugify
+from core.game_state import CharacterState, GameState, slugify, unique_id
 from core.keeper import Keeper
 from core.llm_client import LLMClient
 
@@ -34,8 +34,8 @@ def _protagonist_backstory(proto: dict, camp) -> str:
     if proto.get("occupation"):
         age = f", age {proto['age']}" if proto.get("age") else ""
         bits.append(f"{proto['occupation']}{age}.")
-    if proto.get("background"):
-        bits.append(proto["background"].strip())
+    if proto.get("backstory") or proto.get("background"):
+        bits.append((proto.get("backstory") or proto.get("background")).strip())
     if camp.data.get("protagonist_hints"):
         bits.append(camp.data["protagonist_hints"].strip())
     return " ".join(bits)
@@ -43,15 +43,18 @@ def _protagonist_backstory(proto: dict, camp) -> str:
 
 def new_game(campaign_path, protagonist_path=PROTAGONIST_YAML) -> GameState:
     camp = campaign_mod.load(campaign_path)
-    proto = yaml.safe_load(Path(protagonist_path).read_text(encoding="utf-8"))
+    # The campaign's own protagonist (setting-appropriate) wins; else the generic fallback sheet.
+    proto = camp.protagonist or yaml.safe_load(Path(protagonist_path).read_text(encoding="utf-8"))
     chars = [_character_from_sheet(proto.get("name", "Player"), proto,
                                    personality=proto.get("personality", ""),
                                    backstory=_protagonist_backstory(proto, camp),
                                    player_label="Player 1")]
     for p in camp.ai_party:
-        chars.append(_character_from_sheet(p["name"], p, controller="ai",
-                                           personality=p.get("personality", ""),
-                                           backstory=p.get("backstory", "")))
+        c = _character_from_sheet(p["name"], p, controller="ai",
+                                  personality=p.get("personality", ""),
+                                  backstory=p.get("backstory", ""))
+        c.id = unique_id({ch.id for ch in chars}, c.id)   # never collide (widget keys need it)
+        chars.append(c)
     state = GameState(
         campaign_file=str(campaign_path), rule_system=camp.rule_system,
         scene_id=camp.first_scene_id(), visited_scenes=[camp.first_scene_id()],
@@ -71,6 +74,22 @@ class Engine:
         self.keeper = Keeper(self.llm, self.campaign, self.system)
         self._researcher = None
         self._undo_snapshot = None
+        self._repair_character_ids()   # fix pre-fix saves with colliding ids (e.g. non-ASCII names)
+
+    def _repair_character_ids(self):
+        seen, remap = set(), {}
+        for ch in self.state.characters:
+            fixed = unique_id(seen, ch.id or slugify(ch.name))
+            if fixed != ch.id:
+                remap[ch.id] = fixed
+                ch.id = fixed
+            seen.add(fixed)
+        if remap:
+            if self.state.active_character_id in remap:
+                self.state.active_character_id = remap[self.state.active_character_id]
+            if self.state.pending_roll and self.state.pending_roll.get("character_id") in remap:
+                self.state.pending_roll["character_id"] = remap[self.state.pending_roll["character_id"]]
+            self.state.save()
 
     # ---------- public API ----------
     def set_llm(self, llm, util_llm=None):
@@ -127,6 +146,43 @@ class Engine:
         self.state.messages.append({"role": "dice", "name": char.name, "content": line})
         self.state.save()
         return result
+
+    def begin_talk(self, character_id: str, text: str) -> list:
+        """Say something in character WITHOUT committing to an action.
+        Costs no turn, triggers no rolls, no scene changes. Returns the AI characters who may reply."""
+        self._take_snapshot()
+        char = self.state.get_character(character_id)
+        if char:
+            self.state.active_character_id = character_id
+        self.state.messages.append({"role": "player", "name": char.name if char else None,
+                                    "content": text})
+        self.state.save()
+        if self.state.party_mode == "solo":
+            return []
+        return [c for c in self.state.ai_characters() if c.status == "active"]
+
+    def talk_steps(self, responders):
+        """Generator: each AI companion answers conversationally, one beat at a time."""
+        if not responders:
+            self._finish_turn()
+            return
+        from agents.player_agent import PlayerAgent
+        agent = PlayerAgent(self.llm, self.util_llm)
+        for char in responders:
+            yield f"💬 {char.name} answers…"
+            reply = agent.take_turn(char, self.state, self.campaign, mode="talk")
+            self.state.messages.append({"role": "companion", "name": char.name, "content": reply})
+            self.state.save()
+        self._finish_turn()
+
+    def ask_keeper_ooc(self, question: str) -> str:
+        """Out-of-character question to the Keeper (rules, recap, clarification).
+        Changes nothing in the game — no rolls, no effects, no turn."""
+        self.state.messages.append({"role": "ooc", "name": "You", "content": question})
+        answer = self.keeper.answer_ooc(self.state, question)
+        self.state.messages.append({"role": "ooc", "name": "Keeper", "content": answer})
+        self.state.save()
+        return answer
 
     def begin_negotiate(self, text: str) -> str:
         """Player argues for a different skill/approach instead of rolling."""
@@ -191,9 +247,7 @@ class Engine:
         sheet = sheet or {"stats": self.system.character_sheet_defaults()}
         char = _character_from_sheet(name, sheet, controller=controller, personality=personality,
                                      backstory=backstory, player_label=player_label)
-        base, n = char.id, 2
-        while self.state.get_character(char.id):
-            char.id = f"{base}_{n}"; n += 1
+        char.id = unique_id({c.id for c in self.state.characters}, char.id)
         self.state.characters.append(char)
         self.state.dice_log.append(f"{char.name} joins the party ({controller}-controlled).")
         self.state.save()
@@ -330,7 +384,7 @@ class Engine:
         if not actors:
             return
         from agents.player_agent import PlayerAgent
-        agent = PlayerAgent(self.llm)
+        agent = PlayerAgent(self.llm, self.util_llm)
         actions = []
         for char in actors:
             yield f"🎭 {char.name} decides what to do…"
@@ -339,8 +393,13 @@ class Engine:
             st.save()
             actions.append(f"{char.name}: {action}")
         yield "The Keeper resolves the party's actions…"
-        wrap = "COMPANION ACTIONS this turn:\n" + "\n".join(actions) + \
-               "\nResolve these actions briefly (auto-roll any checks yourself via roll_request)."
+        wrap = ("COMPANION ACTIONS this turn (the players have ALREADY read these — do not repeat, "
+                "re-quote, or re-narrate them):\n" + "\n".join(actions) +
+                "\nOnly add the WORLD'S reaction and any consequences, and call a roll "
+                "(roll_request) if a companion attempted something uncertain.")
+        if st.companion_style == "player":
+            wrap += (" Keep it tight — 1-3 sentences. Do NOT expand their actions into prose or add "
+                     "dialogue for them; they are players who speak for themselves.")
         yield from self._keeper_cycle_steps(wrap, allow_companions=False)
 
     def _finish_turn(self):

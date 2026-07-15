@@ -8,7 +8,19 @@ SAVES_DIR = Path(__file__).resolve().parent.parent / "data" / "saves"
 
 
 def slugify(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "char"
+    # Keep unicode word chars so non-ASCII names (e.g. 中文名) get distinct ids, not all "char".
+    s = re.sub(r"[^\w]+", "_", (name or "").strip().lower(), flags=re.UNICODE).strip("_")
+    return s or "char"
+
+
+def unique_id(existing_ids, base: str) -> str:
+    """Return base, or base_2/base_3/... so ids never collide (widget keys depend on this)."""
+    if base not in existing_ids:
+        return base
+    n = 2
+    while f"{base}_{n}" in existing_ids:
+        n += 1
+    return f"{base}_{n}"
 
 
 @dataclass
@@ -26,7 +38,10 @@ class CharacterState:
     personality: str = ""            # used when AI-controlled
     backstory: str = ""
     status: str = "active"           # active | unconscious | insane | dead
-    private_thoughts: list = field(default_factory=list)  # AI character's inner monologue (last N)
+    # --- inner life (AI-controlled characters) ---
+    private_thoughts: list = field(default_factory=list)  # recent inner monologue, rolling window
+    memory_summary: str = ""         # their own chronicle: what THEY lived through, in their voice
+    relationships: dict = field(default_factory=dict)  # name -> what they privately think of them
 
 
 @dataclass
@@ -43,6 +58,7 @@ class GameState:
     party_mode: str = "keeper"       # solo | keeper | active (governs AI characters only)
     language: str = "auto"           # auto | en | zh | yue
     god_mode: bool = False           # keeper & companions play along with the player, never block
+    companion_style: str = "player"  # player (table register: intent+dialogue) | cinematic (prose)
     turn_count: int = 0
     summary: str = ""
     messages: list = field(default_factory=list)         # [{role, name?, content}] sent to LLM (recent)

@@ -3,10 +3,12 @@ import json
 import re
 from dataclasses import dataclass, field
 
+from core import minigames_catalog
+
 CONTROL_KEYS = {"roll_request", "stress_check", "hp_change", "clues_discovered",
                 "scene_transition", "characters_act", "minigame"}
 
-MINIGAME_TYPES = {"burn_reveal", "cipher", "seance", "combination_lock", "tarot_draw"}
+MINIGAME_TYPES = minigames_catalog.types()
 
 RECENT_WINDOW = 20  # messages sent verbatim
 
@@ -44,19 +46,7 @@ Field meanings (use null / [] when not applicable this turn):
 - characters_act: ids of AI-controlled companions who should act next turn (only when their action matters).
 - minigame: an OPTIONAL dramatic device. Use SPARINGLY (at most once per scene), only when the fiction
   naturally calls for it, and NEVER together with roll_request. One of:
-  {"type": "burn_reveal", "hidden_text": "<the secret message>", "context": "<what the players hold>", "skin": "parchment"}
-    — a suspicious surface held to heat/light reveals hidden writing.
-    skin matches the setting: "parchment" (period paper), "modern" (printout/receipt/phone note),
-    "stone" (engraving/tomb slab), "chalk" (blackboard/school). Pick what fits the current location.
-  {"type": "cipher", "ciphertext": "<encoded text shown>", "solution": "<the answer word/phrase>", "hint": "<one cryptic hint>"}
-    — a coded note, inscription, or riddle the players must solve themselves.
-  {"type": "combination_lock", "code": "<3-6 digits>", "clue": "<in-fiction hint pointing to the digits>"}
-    — a safe, padlock, or door mechanism. The players get 4 attempts with feedback.
-  {"type": "seance", "message": "<what the spirit spells out>"}
-    — a séance/ouija/planchette moment; the message is spelled out letter by letter.
-  {"type": "tarot_draw", "context": "<why the cards are being read>"}
-    — a fortune-teller/omen moment; the game draws 3 random cards and you MUST weave their
-    listed meanings into what comes next.
+  {minigame_contract}
   After the minigame you will receive a MINIGAME RESULT message; continue the story from it.
 
 Worked example:
@@ -67,15 +57,48 @@ The floorboards groan as you kneel. Something glints between them — but the li
  "stress_check": null, "hp_change": null, "clues_discovered": [], "scene_transition": null, "characters_act": []}
 ```'''
 
-CONDUCT = """=== RULES OF CONDUCT ===
-- NEVER decide, speak, or act for a HUMAN-controlled character. Narrate the world, then stop.
-- Prioritize player agency: let them try anything; consequences, not refusals.
+CONDUCT_REST = """- Prioritize player agency: let them try anything; consequences, not refusals.
 - MATURE THEMES: this is adult horror. Do not sanitize violence, madness, or dread.
 - Describe scenes with visceral sensory detail (smell, sound, touch).
 - NEVER expose internal ids (clue ids, scene ids, event ids) in the narrative — they belong
   only in the json control block. In prose, describe things naturally.
 - End narration with a hook or "What do you do?" unless a roll is pending.
 - One roll at a time. After a ROLL RESULT message, narrate the outcome vividly — success with flair, failure with complication, fumble with disaster."""
+
+
+def character_authority_clause(state) -> str:
+    """Who the Keeper may vs must-not speak/act for — the core 'don't play other players' rule.
+    Human characters are always off-limits. AI companions are off-limits too when they play as
+    real players (player companion_style + they act on their own turns); the Keeper voices them
+    as NPCs only in solo mode or cinematic style."""
+    if state is None:
+        return "- NEVER decide, speak, or act for a HUMAN-controlled character. Narrate the world, then stop."
+    humans = [c.name for c in state.characters if c.controller == "human"]
+    ai = [c.name for c in state.characters if c.controller == "ai"]
+    treat_ai_as_players = (getattr(state, "companion_style", "player") == "player"
+                           and state.party_mode != "solo")
+    protected = humans + (ai if treat_ai_as_players else [])
+    npc_companions = [n for n in ai if n not in protected]
+
+    lines = []
+    if protected:
+        lines.append(f"- NEVER decide, speak, or act for these PLAYER characters: {', '.join(protected)}. "
+                     "They are controlled by their own players. You may narrate the RESULT of an action a "
+                     "player has ALREADY declared, but never invent their dialogue, decisions, or feelings.")
+    if treat_ai_as_players and ai:
+        lines.append(f"- The companions {', '.join(ai)} are AI PLAYERS this session — NOT NPCs you voice. "
+                     "Give them ZERO lines of dialogue and ZERO invented actions in your narration. "
+                     "If you want one of them to react, speak, or act, DO NOT write it yourself — instead "
+                     "put their exact id in \"characters_act\" and stop; their own player then takes a turn "
+                     "and supplies their words. Voicing them yourself is the single worst mistake you can make.")
+    if npc_companions:
+        lines.append(f"- You MAY voice these companions as NPCs (speak and act for them naturally): "
+                     f"{', '.join(npc_companions)}.")
+    return "\n".join(lines)
+
+
+def build_conduct(state) -> str:
+    return "=== RULES OF CONDUCT ===\n" + character_authority_clause(state) + "\n" + CONDUCT_REST
 
 LANGUAGE_BLOCKS = {
     "auto": """=== LANGUAGE (STRICT) ===
@@ -111,10 +134,17 @@ The player is favored by the narrative itself. Overrides normal conduct where th
   while keeping their voices. The world bends; it does not break the player's fantasy."""
 
 
-def build_system_prompt(campaign, system, language: str = "auto", god_mode: bool = False) -> str:
+def build_system_prompt(campaign, system, language: str = "auto", god_mode: bool = False,
+                        state=None) -> str:
+    setting = minigames_catalog.resolve_setting(campaign)
+    contract = OUTPUT_CONTRACT.replace("{minigame_contract}",
+                                       minigames_catalog.contract_block(setting))
     endings = "\n".join(f"- {e.get('outcome')}: {e.get('description')}" for e in campaign.endings)
     brief = [f"Title: {campaign.title}",
              f"The truth: {campaign.plot_outline}"]
+    if campaign.data.get("canon"):
+        brief.append("Setting canon (stay faithful to this established world):\n"
+                     + campaign.data["canon"])
     if campaign.data.get("tone"):
         brief.append(f"Tone: {campaign.data['tone']}")
     npcs = campaign.data.get("npcs") or []
@@ -136,11 +166,11 @@ def build_system_prompt(campaign, system, language: str = "auto", god_mode: bool
 
 {language_block(language)}
 
-{CONDUCT}
+{build_conduct(state)}
 
 {GOD_MODE_BLOCK if god_mode else ""}
 
-{OUTPUT_CONTRACT}
+{contract}
 
 === CAMPAIGN BRIEF (KEEPER EYES ONLY) ===
 {chr(10).join(brief)}"""
@@ -207,9 +237,22 @@ def build_messages(state, campaign, system, user_input: str, nudge: bool = False
         role = "assistant" if m["role"] == "keeper" else "user"
         name = m.get("name")
         content = f"{name}: {m['content']}" if name and role == "user" else m["content"]
+        if m["role"] == "ooc":
+            content = f"[OUT OF CHARACTER — table talk, not story events] {content}"
         msgs.append({"role": role, "content": content})
     msgs.append({"role": "user", "content": user_input})
     return msgs
+
+
+OOC_PROMPT = """You are the KEEPER, stepping OUT of the fiction to answer the player directly,
+as a friendly game master at the table would.
+
+- Answer their question plainly and briefly (rules, a recap of what they know, what their
+  options are, what a skill does, who an NPC was).
+- You may remind them of facts their character would know.
+- Do NOT advance the story, do NOT narrate events, do NOT ask for rolls, and do NOT reveal
+  secrets they have not discovered — hint at what they could pursue instead.
+- No JSON block. Just talk to them."""
 
 
 _FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
@@ -282,11 +325,20 @@ class Keeper:
         self.system = system
         self.parse_failures = 0
 
+    def answer_ooc(self, state, question: str) -> str:
+        """Answer a table question out of character. Never touches game state."""
+        msgs = build_messages(state, self.campaign, self.system, question)
+        system_prompt = (OOC_PROMPT + "\n\n" + language_block(state.language)
+                         + f"\n\n=== WHAT YOU KNOW (KEEPER EYES ONLY — do not spoil) ===\n"
+                           f"{self.campaign.plot_outline}")
+        return self.llm.chat(msgs, system_prompt=system_prompt, temperature=0.5, max_tokens=600) or ""
+
     def respond(self, state, user_input: str):
         """One keeper turn. Returns (narrative, Control)."""
         nudge = self.parse_failures >= 2
         msgs = build_messages(state, self.campaign, self.system, user_input, nudge)
-        system_prompt = build_system_prompt(self.campaign, self.system, state.language, state.god_mode)
+        system_prompt = build_system_prompt(self.campaign, self.system, state.language,
+                                             state.god_mode, state=state)
         raw = self.llm.chat(msgs, system_prompt=system_prompt)
         narrative, ctrl = parse_response(raw)
         if ctrl == Control.empty() and "```" not in (raw or ""):

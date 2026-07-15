@@ -167,8 +167,11 @@ def render_cipher(payload: dict, key: str):
     attempts_key = f"{key}_attempts"
     attempts = st.session_state.setdefault(attempts_key, 0)
     solution = (payload.get("solution") or "").strip().lower()
+    max_attempts = max(1, int(payload.get("attempts", 3)))          # host-configurable
+    hint_after = int(payload.get("hint_after", 1))                  # show hint after N misses
+    allow_giveup = payload.get("allow_giveup", True)
 
-    if attempts >= 1 and payload.get("hint"):
+    if attempts >= hint_after and payload.get("hint"):
         st.caption(f"💡 Hint: {payload['hint']}")
 
     with st.form(f"{key}_form", clear_on_submit=True):
@@ -179,12 +182,12 @@ def render_cipher(payload: dict, key: str):
             st.session_state.pop(attempts_key, None)
             return f"The player SOLVED the cipher — the answer was \"{payload.get('solution')}\""
         st.session_state[attempts_key] = attempts + 1
-        if st.session_state[attempts_key] >= 3:
+        if st.session_state[attempts_key] >= max_attempts:
             st.session_state.pop(attempts_key, None)
-            return ("The player FAILED to solve the cipher after 3 attempts "
+            return (f"The player FAILED to solve the cipher after {max_attempts} attempts "
                     f"(the answer was \"{payload.get('solution')}\" — do not reveal it unless the fiction allows)")
-        st.error(f"Wrong. {3 - st.session_state[attempts_key]} attempt(s) left.")
-    if st.button("Give up", key=f"{key}_giveup"):
+        st.error(f"Wrong. {max_attempts - st.session_state[attempts_key]} attempt(s) left.")
+    if allow_giveup and st.button("Give up", key=f"{key}_giveup"):
         st.session_state.pop(attempts_key, None)
         return "The player gave up on the cipher unsolved"
     return None
@@ -262,11 +265,108 @@ def render_tarot_draw(payload: dict, key: str):
     return None
 
 
+# --- glyph sequence: activate the sigils in the right order ---
+
+def render_glyph_sequence(payload: dict, key: str):
+    sequence = [str(g) for g in payload.get("sequence") or []]
+    decoys = [str(g) for g in payload.get("decoys") or []]
+    if not sequence:
+        return "(glyph_sequence had no sequence — skipped)"
+    max_attempts = max(1, int(payload.get("attempts", 3)))
+
+    st.markdown("### ✴️ Arcane glyphs await the correct order")
+    if payload.get("clue"):
+        st.caption(f"🧩 {payload['clue']}")
+
+    shuffled_key, picked_key, attempts_key = f"{key}_glyphs", f"{key}_picked", f"{key}_gattempts"
+    if shuffled_key not in st.session_state:
+        pool = sequence + decoys
+        random.shuffle(pool)
+        st.session_state[shuffled_key] = pool
+        st.session_state[picked_key] = []
+        st.session_state[attempts_key] = 0
+    picked = st.session_state[picked_key]
+
+    st.markdown("**Activated:** " + (" → ".join(f"`{g}`" for g in picked) or "_none_")
+                + f" ({len(picked)}/{len(sequence)})")
+    cols = st.columns(min(4, max(2, len(st.session_state[shuffled_key]))))
+    for i, glyph in enumerate(st.session_state[shuffled_key]):
+        if cols[i % len(cols)].button(glyph, key=f"{key}_g{i}", disabled=glyph in picked):
+            if glyph == sequence[len(picked)]:
+                picked.append(glyph)
+                if len(picked) == len(sequence):
+                    for k in (shuffled_key, picked_key, attempts_key):
+                        st.session_state.pop(k, None)
+                    return (f"The player activated the glyphs in the CORRECT order "
+                            f"({' -> '.join(sequence)}) — the ward opens")
+                st.rerun()
+            else:
+                st.session_state[picked_key] = []
+                st.session_state[attempts_key] += 1
+                if st.session_state[attempts_key] >= max_attempts:
+                    for k in (shuffled_key, picked_key, attempts_key):
+                        st.session_state.pop(k, None)
+                    return (f"The player FAILED the glyph sequence after {max_attempts} attempts — "
+                            f"the ward flares and seals itself (correct order was "
+                            f"{' -> '.join(sequence)}; do not reveal it)")
+                st.rerun()
+    left = max_attempts - st.session_state.get(attempts_key, 0)
+    st.caption(f"A wrong glyph resets the sequence. {left} attempt(s) before the ward seals.")
+    if st.button("Step back from the glyphs", key=f"{key}_gquit"):
+        for k in (shuffled_key, picked_key, attempts_key):
+            st.session_state.pop(k, None)
+        return "The player stepped away from the glyphs without completing the sequence"
+    return None
+
+
+# --- dice duel: best-of-N gamble against an NPC ---
+
+def render_dice_duel(payload: dict, key: str):
+    opponent = payload.get("opponent", "the stranger")
+    rounds = max(1, int(payload.get("rounds", 3)))
+    st.markdown(f"### 🎲 Dice duel against **{opponent}**")
+    if payload.get("stakes"):
+        st.caption(f"💰 Stakes: {payload['stakes']}")
+
+    log_key = f"{key}_duel"
+    log = st.session_state.setdefault(log_key, [])   # [(you, them, outcome_str)]
+    you = sum(1 for r in log if r[0] > r[1])
+    them = sum(1 for r in log if r[1] > r[0])
+
+    for i, (a, b, line) in enumerate(log, 1):
+        st.markdown(f"- Round {i}: you **{a}** vs {opponent} **{b}** — {line}")
+
+    need = rounds // 2 + 1
+    if you >= need or them >= need or len(log) >= rounds:
+        st.session_state.pop(log_key, None)
+        if you == them:
+            return f"The dice duel with {opponent} ended in a DRAW ({you}-{them})"
+        return (f"The player {'WON' if you > them else 'LOST'} the dice duel against {opponent} "
+                f"({you}-{them}). Stakes: {payload.get('stakes', 'as agreed')}")
+
+    st.markdown(f"**Round {len(log) + 1} of {rounds}** — score {you}-{them}. Choose your play:")
+    c1, c2 = st.columns(2)
+    choice = None
+    if c1.button("🔥 Bold (d10 — swing big)", key=f"{key}_bold", width="stretch"):
+        choice = ("bold", random.randint(1, 10))
+    if c2.button("🛡️ Steady (d6+2 — play safe)", key=f"{key}_steady", width="stretch"):
+        choice = ("steady", random.randint(1, 6) + 2)
+    if choice:
+        their = random.randint(1, 10) if random.random() < 0.5 else random.randint(1, 6) + 2
+        line = "you take the round" if choice[1] > their else \
+               ("they take it" if their > choice[1] else "dead even — no point")
+        log.append((choice[1], their, f"{choice[0]} play; {line}"))
+        st.rerun()
+    return None
+
+
 RENDERERS = {"burn_reveal": render_burn_reveal, "cipher": render_cipher, "seance": render_seance,
-             "combination_lock": render_combination_lock, "tarot_draw": render_tarot_draw}
+             "combination_lock": render_combination_lock, "tarot_draw": render_tarot_draw,
+             "glyph_sequence": render_glyph_sequence, "dice_duel": render_dice_duel}
 
 ICONS = {"burn_reveal": "🕯️", "cipher": "🔏", "seance": "☩",
-         "combination_lock": "🔒", "tarot_draw": "🃏"}
+         "combination_lock": "🔒", "tarot_draw": "🃏",
+         "glyph_sequence": "✴️", "dice_duel": "🎲"}
 
 
 def render_minigame(payload: dict, key: str):

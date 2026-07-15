@@ -57,10 +57,12 @@ def make_llms():
 
 def start_game(campaign_path, resume: bool):
     save = save_exists(campaign_path)
-    if resume and save:
-        state = GameState.load(save)
-    else:
-        state = new_game(campaign_path)
+    try:
+        state = GameState.load(save) if (resume and save) else new_game(campaign_path)
+    except (FileNotFoundError, OSError) as e:
+        st.session_state.engine = None
+        st.session_state.setup_error = f"Could not load this campaign or save: {e}\nTry Restart."
+        return
     try:
         main, util = make_llms()
         st.session_state.engine = Engine(state, llm=main, util_llm=util)
@@ -172,6 +174,17 @@ def render_sidebar(engine: Engine | None):
             state.party_mode = mode
             state.save()
 
+        styles = {"player": "🎭 Player", "cinematic": "🎬 Cinematic"}
+        cur = state.companion_style if state.companion_style in styles else "player"
+        style = st.segmented_control(
+            "Companion voice", list(styles), format_func=styles.get, default=cur,
+            key="companion_style_pick",
+            help="Player: AI companions talk like people at a table — intent + dialogue, concise. "
+                 "Cinematic: richer novelistic prose.")
+        if style and style != state.companion_style:
+            state.companion_style = style
+            state.save()
+
         st.subheader("Party")
         for ch in state.characters:
             status = "" if ch.status == "active" else f" — {ch.status.upper()}"
@@ -185,6 +198,26 @@ def render_sidebar(engine: Engine | None):
             if want != ch.controller:
                 engine.set_controller(ch.id, want)
                 st.rerun()
+
+        ai_chars = [c for c in state.characters if c.controller == "ai"]
+        if ai_chars:
+            with st.expander("🧠 Inner life"):
+                who = st.selectbox("Character", [c.id for c in ai_chars], key="mind_char",
+                                   format_func=lambda i: state.get_character(i).name)
+                ch = state.get_character(who)
+                st.caption("What they privately remember — this is what they act from.")
+                if ch.memory_summary:
+                    st.markdown(f"**Their memory**\n\n{ch.memory_summary}")
+                else:
+                    st.caption("_No distilled memory yet — it forms as they live through more._")
+                if ch.relationships:
+                    st.markdown("**What they think of the others**")
+                    for k, v in ch.relationships.items():
+                        st.markdown(f"- **{k}**: {v}")
+                if ch.private_thoughts:
+                    st.markdown("**Recent thoughts**")
+                    for t in reversed(ch.private_thoughts[-6:]):
+                        st.markdown(f"- _{t}_")
 
         with st.expander("📖 Character backgrounds"):
             ids = [c.id for c in state.characters]
@@ -261,6 +294,11 @@ def render_transcript(state):
         if m["role"] == "dice":
             with st.chat_message("assistant", avatar="🎲"):
                 st.markdown(f"**{content}**")
+            continue
+        if m["role"] == "ooc":   # table talk — outside the fiction
+            with st.chat_message("assistant", avatar="💭"):
+                st.caption(f"{m.get('name', 'OOC')} · out of character")
+                st.markdown(f":gray[{content}]")
             continue
         if m["role"] == "player" and content.startswith("MINIGAME RESULT:"):
             with st.chat_message("player", avatar="🧩"):
@@ -405,10 +443,31 @@ def render_play_tab(engine: Engine | None):
                     engine.consult_researcher(q.strip(), use_web=web)
                 st.rerun()
 
-    prompt = st.chat_input(f"What does {state.get_character(acting).name} do?")
+    modes = {"🎬 Act": "act", "💬 Talk": "talk", "❓ Ask the Keeper": "ooc"}
+    picked = st.segmented_control(
+        "Mode", list(modes), default="🎬 Act", key="input_mode", label_visibility="collapsed",
+        help="Act: commit to an action — the Keeper narrates, dice may be called. "
+             "Talk: speak to the party without spending a turn — no dice, no plot advance. "
+             "Ask the Keeper: an out-of-character question; changes nothing in the game.")
+    mode = modes.get(picked or "🎬 Act", "act")
+    name = state.get_character(acting).name
+
+    placeholder = {"act": f"What does {name} do?",
+                   "talk": f"What does {name} say? (no turn spent)",
+                   "ooc": "Ask the Keeper anything — rules, a recap, your options…"}[mode]
+    prompt = st.chat_input(placeholder)
     if prompt:
-        start_turn(engine.keeper_steps(engine.begin_action(acting, prompt)),
-                   "The Keeper considers…")
+        if mode == "act":
+            start_turn(engine.keeper_steps(engine.begin_action(acting, prompt)),
+                       "The Keeper considers…")
+        elif mode == "talk":
+            responders = engine.begin_talk(acting, prompt)
+            start_turn(engine.talk_steps(responders),
+                       f"💬 {responders[0].name} answers…" if responders else "…")
+        else:
+            with st.spinner("The Keeper leans back…"):
+                engine.ask_keeper_ooc(prompt)
+            st.rerun()
 
 
 def render_architect_tab():
