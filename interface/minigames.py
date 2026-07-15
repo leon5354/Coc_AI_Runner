@@ -35,8 +35,7 @@ _BURN_CSS = """
   font-size: 1.15em; line-height: 1.9; letter-spacing: .06em;
   user-select: none;
 }
-.paper span { opacity: 0; transition: opacity 1.4s ease, text-shadow 1.4s ease; }
-.paper span.hot { opacity: 1; }
+.paper span { opacity: 0; will-change: opacity; }
 .flame { position: absolute; font-size: 1.7em; pointer-events: none; display: none;
          filter: drop-shadow(0 0 10px rgba(255,150,30,.9)); transform: translate(-50%, -85%); }
 .hint { text-align: center; font-size: .8em; opacity: .6; padding-top: 6px;
@@ -59,57 +58,79 @@ export default function (component) {
   paper.style.fontFamily = skin.font || "Georgia, serif"
   const hotColor = skin.hot || "#58230a"
 
-  // difficulty: flame radius^2 and coverage needed to finish a page
-  const diff = { easy:   { r2: 4200, need: 0.75 },
-                 normal: { r2: 2600, need: 0.85 },
-                 hard:   { r2: 1100, need: 0.93 } }[(data && data.difficulty) || "normal"]
-             || { r2: 2600, need: 0.85 }
+  // Heat model: the flame reveals nothing on contact — it warms whatever it LINGERS over.
+  // r2 = flame reach; ratePerSec = heat/second at the core (so a full letter takes ~1/rate s of
+  // dwell); need = fraction of the page that must be brought out to finish. Time-based, so a
+  // fast sweep barely warms the ink and only patience draws it fully out.
+  const diff = { easy:   { r2: 4600, ratePerSec: 0.30, need: 0.72 },
+                 normal: { r2: 2900, ratePerSec: 0.16, need: 0.82 },
+                 hard:   { r2: 1500, ratePerSec: 0.09, need: 0.90 } }[(data && data.difficulty) || "normal"]
+             || { r2: 2900, ratePerSec: 0.16, need: 0.82 }
 
   const pages = (data && data.pages && data.pages.length) ? data.pages : [(data && data.text) || ""]
-  let pageIdx = 0, spans = [], revealed = 0, pageDone = false
+  let pageIdx = 0, spans = [], heat = [], pageDone = false
 
   function loadPage(i) {
     paper.innerHTML = ""
-    spans = []; revealed = 0; pageDone = false
+    spans = []; heat = []; pageDone = false
     for (const ch of pages[i]) {
       const s = document.createElement("span")
       s.textContent = ch
       paper.appendChild(s)
-      spans.push(s)
+      spans.push(s); heat.push(0)
     }
     if (pageLabel) pageLabel.textContent = pages.length > 1 ? `page ${i + 1} / ${pages.length}` : ""
   }
   loadPage(0)
 
+  let cx = -1, cy = -1, active = false, lastTs = 0
+  function heatStep() {
+    if (pageDone || !active) { lastTs = 0; return }
+    const now = performance.now()
+    if (!lastTs) { lastTs = now; return }
+    const dt = Math.min(120, now - lastTs) / 1000    // seconds since last step, clamped
+    let done = 0
+    for (let i = 0; i < spans.length; i++) {
+      if (heat[i] < 1) {
+        const r = spans[i].getBoundingClientRect()
+        const dx = cx - (r.left + r.width / 2)
+        const dy = cy - (r.top + r.height / 2)
+        const d2 = dx * dx + dy * dy
+        if (d2 < diff.r2) {
+          const closeness = 1 - d2 / diff.r2                        // hotter at the flame's core
+          heat[i] = Math.min(1, heat[i] + closeness * diff.ratePerSec * dt)
+          const h = heat[i]
+          spans[i].style.opacity = Math.pow(h, 0.7)                 // emerge gradually, not on contact
+          spans[i].style.color = hotColor
+          spans[i].style.textShadow = `0 0 ${1 + h * 7}px ${hotColor}${h > 0.5 ? "88" : "44"}`
+        }
+      }
+      if (heat[i] >= 0.9) done++
+    }
+    if (spans.length > 0 && done >= spans.length * diff.need) {
+      pageDone = true
+      for (const s of spans) { s.style.opacity = 1; s.style.color = hotColor }
+      if (pageIdx + 1 < pages.length) setTimeout(() => { pageIdx++; loadPage(pageIdx) }, 1600)
+      else setTriggerValue("revealed", true)
+    }
+  }
+
   wrap.onmousemove = (e) => {
     const wr = wrap.getBoundingClientRect()
+    cx = e.clientX; cy = e.clientY; active = true
     flame.style.display = "block"
     flame.style.left = (e.clientX - wr.left) + "px"
     flame.style.top = (e.clientY - wr.top) + "px"
-    if (pageDone) return
-    for (const s of spans) {
-      if (s.classList.contains("hot")) continue
-      const r = s.getBoundingClientRect()
-      const dx = e.clientX - (r.left + r.width / 2)
-      const dy = e.clientY - (r.top + r.height / 2)
-      if (dx * dx + dy * dy < diff.r2) {
-        s.classList.add("hot")
-        s.style.color = hotColor
-        s.style.textShadow = `0 0 6px ${hotColor}66`
-        revealed++
-      }
-    }
-    if (spans.length > 0 && revealed >= spans.length * diff.need) {
-      pageDone = true
-      for (const s of spans) { s.classList.add("hot"); s.style.color = hotColor }
-      if (pageIdx + 1 < pages.length) {
-        setTimeout(() => { pageIdx++; loadPage(pageIdx) }, 1200)   // char the page, turn to next
-      } else {
-        setTriggerValue("revealed", true)
-      }
-    }
+    heatStep()                       // warm on movement (elapsed-time based, so speed matters)
   }
-  wrap.onmouseleave = () => { flame.style.display = "none" }
+  wrap.onmouseleave = () => { active = false; flame.style.display = "none" }
+
+  // Also warm while the flame holds still over a spot. setInterval (not rAF) keeps ticking when
+  // the tab isn't the focused paint target; stops itself once the component is replaced.
+  const timer = setInterval(() => {
+    if (!paper.isConnected) { clearInterval(timer); return }
+    heatStep()
+  }, 40)
 }
 """
 
