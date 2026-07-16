@@ -1,0 +1,290 @@
+schema_version: 2
+rule_system: coc7e
+title: The House on Marsh Lane
+introduction: >
+  Boston, 1925. A landlord named Mr. Knott has hired you to investigate his rental
+  property at the end of Marsh Lane. Three families have fled the house in two years;
+  the last tenant, Mr. Vittorio, now sits in a padded room at the county asylum,
+  whispering about "the man in the walls". Knott wants to know what is wrong with the
+  house — and he is paying well enough that you didn't ask too many questions.
+plot_outline: >
+  KEEPER ONLY. The house was built in 1835 by Elias Corwin, a merchant who dabbled in
+  necromancy. Corwin never died: his corpse lies in a sealed coffin in the cellar,
+  animated by a dark pact, projecting his will into the house. He drives tenants mad
+  or dead to feed on their terror. The investigation should lead from records (library)
+  and the asylum (Vittorio) to the house itself, and finally to the cellar. Destroying
+  the corpse (fire, or the ritual dagger found in the attic) ends the haunting. Corwin
+  can telekinetically hurl objects, cause visions, and possess the weak-willed.
+tone: slow-burn dread that turns visceral in the cellar
+npcs:
+  - name: Mr. Knott
+    role: Nervous landlord client
+    motivation: Wants the house rentable again without scandal.
+    secret: He heard scratching from inside the walls on his one visit and fled.
+    voice: Fussy, apologetic, dabs his forehead; deflects blame constantly.
+  - name: Mr. Vittorio
+    role: Broken former tenant, asylum Ward C
+    motivation: Wants someone to finally believe him.
+    secret: Corwin still visits his dreams and counts him nightly.
+    voice: Flat whisper, sudden lucid bursts, eyes drift to ceiling corners.
+  - name: Elias Corwin
+    role: The thing in the cellar
+    motivation: Feed on terror; be neither found nor freed.
+    secret: The dagger in his own attic can end him — he cannot touch it.
+    voice: Heard through walls — a dry counting whisper; never speaks plainly.
+escalation:
+  - A cold spot follows the investigators between rooms; doors they closed stand open.
+  - Corwin hurls small objects; written words appear in dust ("GET OUT" / "STAY FOREVER").
+  - A full assault — thrown furniture, a possession attempt on the weakest-willed present.
+  - If they persist past the assault, the cellar wall bricks begin to fall from the inside.
+endings:
+  - outcome: destroyed
+    description: The investigators burn or ritually destroy Corwin's corpse; the house falls silent.
+  - outcome: fled
+    description: The investigators abandon the case; the house claims its next tenant.
+  - outcome: claimed
+    description: Corwin kills or possesses the investigators. The house wins.
+protagonist_hints: >
+  The protagonist answered Knott's advertisement for a "discreet inquiry agent".
+protagonist:
+  name: Eleanor Ash
+  gender: Female
+  occupation: Private inquiry agent, Boston, 1925
+  personality: Rational but stubborn; keeps reading when she should run.
+  backstory: >
+    A sharp-witted analyst drawn to the occult after a childhood night her family
+    never spoke of again. She answered Knott's advertisement for discreet work.
+  stats:
+    HP: 12
+    Stress: 60
+    Skills:
+      Spot Hidden: 70
+      Psychology: 60
+      Library Use: 55
+      Occult: 40
+      Persuade: 45
+  inventory:
+    - Notebook & pen
+    - Electric torch
+    - Brass lighter
+    - Snub-nose revolver
+ai_party:
+  - name: Prof. Warren Vale
+    gender: Male
+    personality: Dry, methodical occult scholar; hides fear behind pedantry.
+    backstory: Miskatonic folklore lecturer who owes the protagonist a favor.
+    relationship_to_player: Old friend and reluctant consultant.
+    stats:
+      HP: 9
+      Stress: 65
+      Skills:
+        Library Use: 70
+        Occult: 60
+        Psychology: 50
+        Spot Hidden: 40
+        First Aid: 30
+scenes:
+  - id: briefing
+    mood: daylight
+    name: Knott's Office
+    description: >
+      A cramped office above a cobbler's shop. Mr. Knott, sweating despite the cold,
+      slides a folder across the desk: tenant complaints, a hospital bill, a key on a
+      brass fob. He will answer questions but knows little — he inherited the property
+      and has never spent a night there.
+    clues:
+      - id: tenant_letters
+        description: A folder of complaint letters from the previous tenants.
+        skill: Library Use
+        difficulty: regular
+        reveals: >
+          All three families describe the same escalation: scratching in the walls,
+          objects moving, then "the thin man" appearing at the foot of the bed. The
+          Vittorio letters end mid-sentence.
+      - id: knott_deed
+        description: Knott's property paperwork, if the investigators press him for it.
+        skill: Persuade
+        difficulty: regular
+        reveals: >
+          The deed chain shows the house has changed hands eleven times since 1835,
+          but the original owner is listed only as "E.C." — the name has been
+          scratched out on every subsequent record.
+    items:
+      - name: House key
+        description: A heavy iron key on a brass fob.
+        effect: Opens the front door of the house on Marsh Lane.
+    stress_events: []
+    exits:
+      - to: library
+        condition: Research the house's history.
+      - to: asylum
+        condition: Visit Vittorio at the county asylum.
+      - to: house_ground
+        condition: Go directly to the house.
+  - id: library
+    mood: daylight
+    name: Boston Athenaeum Records Room
+    description: >
+      Green-shaded lamps, the smell of dust and binding glue. Property records,
+      newspaper morgues, and a bored clerk who perks up at the mention of Marsh Lane —
+      "the screaming house", the older staff call it.
+    clues:
+      - id: corwin_article
+        description: Newspaper archives mentioning the house.
+        skill: Library Use
+        difficulty: regular
+        reveals: >
+          An 1835 article names the builder as Elias Corwin, a shipping merchant
+          ruined by scandal — witnesses claimed he robbed graves. An 1851 piece
+          reports Corwin's death, but notes "no body was displayed at the funeral".
+      - id: corwin_diary_ref
+        description: A librarian's handwritten index card tucked in the property file.
+        skill: Spot Hidden
+        difficulty: hard
+        reveals: >
+          The card reads: "Corwin journal — RESTRICTED — removed to attic storage of
+          the property itself by order of the estate, 1852." The journal is still in
+          the house.
+    items: []
+    stress_events: []
+    exits:
+      - to: briefing
+        condition: Report back to Knott.
+      - to: asylum
+        condition: Visit Vittorio.
+      - to: house_ground
+        condition: Go to the house.
+  - id: asylum
+    mood: dusk
+    name: County Asylum, Ward C
+    description: >
+      White tile, carbolic soap, distant weeping. Vittorio is a shrunken man strapped
+      loosely to a wheeled chair by the window. He seems lucid until the house is
+      mentioned; then his eyes go to the corner of the ceiling and stay there.
+    clues:
+      - id: vittorio_testimony
+        description: What Vittorio saw, if he can be coaxed to speak.
+        skill: Psychology
+        difficulty: regular
+        reveals: >
+          "The thin man comes out of the cellar wall. He counted my family. He said
+          the house needs to be fed and it was our turn." Vittorio's wife died of a
+          fall on the cellar stairs the same week.
+    items: []
+    stress_events:
+      - id: vittorio_seizure
+        trigger: Pressing Vittorio about the cellar until he breaks.
+        loss: 0/1d2
+    exits:
+      - to: briefing
+        condition: Report back to Knott.
+      - to: library
+        condition: Research the records.
+      - to: house_ground
+        condition: Go to the house.
+  - id: house_ground
+    mood: night
+    name: The House — Ground Floor
+    description: >
+      The house crouches at the dead end of Marsh Lane, shutters askew like a face
+      that has had a stroke. Inside: dust sheets, a cold that has nothing to do with
+      the season, and a kitchen where every knife is missing from the drawer.
+    clues:
+      - id: scratched_floor
+        description: Scratch marks in the parlor floorboards.
+        skill: Spot Hidden
+        difficulty: regular
+        reveals: >
+          Deep gouges under the dust, all radiating from the cellar door — as if
+          something heavy was dragged toward it, clawing, many times over many years.
+      - id: missing_knives
+        description: The empty knife drawer and where its contents went.
+        skill: Spot Hidden
+        difficulty: hard
+        reveals: >
+          Every knife in the house is embedded in the ceiling beam directly above the
+          cellar door, driven in to the hilt, points down.
+    items: []
+    stress_events:
+      - id: cold_breath
+        trigger: First entering the house — breath fogs, and something exhales with you.
+        loss: 0/1d2
+    exits:
+      - to: house_attic
+        condition: Climb to the attic.
+      - to: cellar
+        condition: Open the cellar door.
+      - to: briefing
+        condition: Leave and report to Knott.
+  - id: house_attic
+    mood: night
+    name: The House — Attic
+    description: >
+      A low, raftered space stacked with the sealed belongings of eleven fled
+      households. A single small window. The dust here lies in strange, swept
+      patterns, as if something paces at night.
+    clues:
+      - id: corwin_journal
+        description: A locked strongbox marked "E.C." beneath a dust sheet.
+        skill: Library Use
+        difficulty: regular
+        reveals: >
+          Corwin's journal, 1834-1851. The final entry: "I have paid the price and
+          signed in my own blood. I shall not die. Let them bury the box — I will be
+          in the walls, and the house will feed me forever."
+      - id: ritual_dagger
+        description: Something heavy wrapped in oilcloth at the bottom of the strongbox.
+        skill: Occult
+        difficulty: regular
+        reveals: >
+          A bronze dagger etched with warding sigils. Prof. Vale (or an Occult roll)
+          identifies it as a grave-binding blade — driven through a corpse's heart,
+          it severs a necromantic pact.
+    items:
+      - name: Ritual dagger
+        description: Bronze, sigil-etched, cold to the touch.
+        effect: Destroying Corwin's corpse with it ends the haunting.
+    stress_events:
+      - id: attic_face
+        trigger: The small window briefly shows a thin face reflected BEHIND the viewer.
+        loss: 1/1d4
+    exits:
+      - to: house_ground
+        condition: Climb back down.
+      - to: cellar
+        condition: Head to the cellar.
+  - id: cellar
+    mood: unearthly
+    name: The Cellar
+    description: >
+      Stone steps descend into darkness that eats lantern light. The air is wet wool
+      and old meat. The far wall is newer brickwork than the rest — and it is warm.
+      Behind it, something shifts its weight.
+    keeper_notes: >
+      Climax scene — pace it in three waves: unease (sounds behind brick), the reveal
+      (corwin_revealed), then the assault (corwin_assault) once they try to destroy him.
+      Without the dagger or fire, the corpse cannot be permanently harmed; let attempts
+      fail frighteningly. If a character stands alone, Corwin attempts possession.
+      If they flee, the house lets them — Corwin prefers survivors who spread the fear.
+    clues:
+      - id: bricked_alcove
+        description: The newer brick wall and what lies behind it.
+        skill: Spot Hidden
+        difficulty: regular
+        reveals: >
+          The mortar is scored with the same warding sigils as the dagger — and half
+          of them have been scratched away from the INSIDE. A few bricks are already
+          loose.
+    items: []
+    stress_events:
+      - id: corwin_revealed
+        trigger: Breaking through the bricks — Corwin's corpse sits upright in its
+          coffin, desiccated, and its head turns.
+        loss: 1d4/1d8
+      - id: corwin_assault
+        trigger: Corwin unleashes his fury — hurled debris, the walls bleeding,
+          the thin man's voice inside their heads.
+        loss: 1/1d6
+    exits:
+      - to: house_ground
+        condition: Flee up the stairs.
