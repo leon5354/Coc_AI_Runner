@@ -5,7 +5,7 @@
 An LLM-driven tabletop RPG runner with a fully stateful AI Keeper (GM), real dice mechanics,
 character memory, and pluggable rule systems. It started as a Call of Cthulhu tool; it now
 runs **Call of Cthulhu 7e, Dungeons & Dragons 5e, Warhammer Fantasy Roleplay, or a generic
-d100 system** — pick one per campaign. Streamlit UI, works with Google Gemini, OpenRouter
+d100 system** — pick one per campaign. Web UI (React), works with Google Gemini, OpenRouter
 (Grok, Claude, Gemini, Qwen, etc.), or local Ollama.
 
 The goal: a Keeper that actually remembers the plot, dice that respect your character sheet,
@@ -94,21 +94,34 @@ Adding a system is one file in `rules/` implementing the `RuleSystem` interface 
 
 ## Quick start
 
+Needs Python 3.10+ and [Node.js](https://nodejs.org) (to build the web page).
+
+```bash
+copy .env.example .env    # then fill in your provider + API key
+run_web.bat               # sets up everything, builds the web app, opens your browser
+```
+
+No API key? `run_web.bat --mock` plays a short scripted demo offline. Mock games save to
+`data/saves/mock/`, so they never touch your real saves.
+
+By hand:
+
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env    # then fill in your provider + API key
-streamlit run interface/app.py
+cd web && npm install && npm run build && cd ..
+python -m server          # http://127.0.0.1:8000  (add --mock for offline)
 ```
 
-Or on Windows, just double-click `run_app.bat` — it sets up the venv on first run.
+Working on the frontend? Run `python -m server --no-browser` and, in a second terminal,
+`cd web && npm run dev` — open http://localhost:5173 and edits show up instantly.
 
 Pick a campaign in the sidebar and press **Start**. Saves are automatic
 (`data/saves/<campaign>.save.json`) and survive restarts — even mid-roll.
 
-No API key? Set `MOCK_LLM=1` in `.env` to play a short scripted demo offline, or run the
-terminal client: `python cli_play.py --mock`.
+The old Streamlit UI still works while the web app takes over (`run_app.bat`, or
+`streamlit run interface/app.py`). The terminal client: `python cli_play.py --mock`.
 
 ## Architecture
 
@@ -124,7 +137,9 @@ core/
   minigames_catalog.py  single source of truth for minigame types per setting
   llm_client.py         provider abstraction (google / openrouter / ollama)
 agents/       player_agent (AI companions), researcher, scripter, lore (real-setting canon)
-interface/    app.py (Streamlit), dice.py, minigames.py, atmosphere.py, architect.py
+server/       app.py — FastAPI web API over the engine; turns stream beat by beat (NDJSON)
+web/          React + TypeScript frontend (Vite): play screen, dice, minigames, architect
+interface/    legacy Streamlit UI: app.py, dice.py, minigames.py, atmosphere.py, architect.py
 cli_play.py   terminal REPL (dev harness)
 ```
 
@@ -152,6 +167,7 @@ python test_new_systems.py
 python test_minigame_catalog.py
 python test_authority.py
 python test_protagonist.py
+python test_server.py
 ```
 
 `python -m core.campaign <file>` validates a campaign file; `python cli_play.py --mock` plays

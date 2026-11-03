@@ -8,8 +8,9 @@ Supported rule systems: CoC 7e, D&D 5e, Warhammer Fantasy RP, basic d100 (see `r
 ## Data flow (one player turn)
 
 ```
-Streamlit UI (interface/app.py)
-  → Engine.submit_action(char_id, text)          core/engine.py
+Web UI (web/src, React)  →  POST /api/game/act  →  server/app.py
+  (legacy: Streamlit UI interface/app.py calls the engine directly)
+  → Engine.begin_action + keeper_steps(text)     core/engine.py
       → Keeper.respond(state, text)              core/keeper.py
           builds: system prompt (role + rules + language + god mode + campaign brief)
                 + state block (scene, clues, exits, party, STORY SO FAR summary)
@@ -50,7 +51,9 @@ they never spend a turn, roll dice, or change scene/plot state.
 | `agents/player_agent.py` | AI party members | THOUGHT/ACTION (or THOUGHT/SAY in talk mode) output; `PlayerAgent.take_turn(char, state, campaign, mode)`; prompt built from the character's `memory_summary` + `relationships` + recent `private_thoughts`, not just their static sheet; register controlled by `state.companion_style` (player = table voice, no self-narration of involuntary detail or others' reactions; cinematic = richer prose) |
 | `agents/researcher.py` | Diegetic lore handouts | uses `util_llm`; optional DDG web flavor |
 | `agents/scripter.py` | Campaign generator | schema v2 JSON via json_mode; validate + one repair round-trip; generates a setting-appropriate `protagonist` block (not just `ai_party`) with stats matching the rule system's conventions; optional lore fetch via `agents/lore.py` baked into `canon:` |
-| `interface/app.py` | Streamlit shell | thin; all logic in engine; `MOCK_LLM=1` env = offline scripted keeper; `advance_turn()` drives `engine.keeper_steps()` one beat per rerun; mode switch for Act/Talk/Ask-the-Keeper |
+| `server/app.py` | FastAPI web API | One `ENGINE` per process + `BUSY` lock (409 while a turn runs). Turn endpoints (`act/talk/roll/negotiate/minigame`) stream NDJSON: `{label, game}` per beat, then `{done, game}` (or `{done, error, game}`); `roll`'s first line carries `dice`. `game_view()` = `asdict(state)` + title/scene/mood/dice_spec/can_undo. `MOCK_LLM=1` → scripted keeper and saves under `data/saves/mock/`. Serves `web/dist` at `/` and `data/audio` at `/api/audio`. `python -m server [--mock]` runs it (localhost only) |
+| `web/src/` | React frontend | `api.ts` (types mirror `game_state.py`, NDJSON reader), `App.tsx` (state + `turn()`/`call()`), `Play.tsx`, `Sidebar.tsx`, `Dice.tsx`, `Atmosphere.tsx`, `minigames.tsx` (`GAMES` registry), `Architect.tsx`. Markdown via react-markdown (no raw HTML — LLM text is untrusted) |
+| `interface/app.py` | Streamlit shell (legacy) | thin; all logic in engine; `MOCK_LLM=1` env = offline scripted keeper; `advance_turn()` drives `engine.keeper_steps()` one beat per rerun; mode switch for Act/Talk/Ask-the-Keeper |
 | `interface/dice.py` | 3D dice (CCv2) | cosmetic; server rolls first |
 | `interface/minigames.py` | Keeper-invokable minigames | `RENDERERS` dict (must match `minigames_catalog` exactly); skins (parchment/modern/stone/chalk); `render_frozen` freeze-frame |
 | `interface/atmosphere.py` | Mood backgrounds + sound | scene `mood:` (daylight/dusk/night/unearthly, fallback = scene position); sanity vignette; WebAudio drone/heartbeat/dice-clatter (no assets); BGM from `data/audio/` |
@@ -63,13 +66,14 @@ they never spend a turn, roll dice, or change scene/plot state.
 2. **Minigame types**: `core/minigames_catalog.py` is the single source of truth (type, label,
    per-setting fit, keeper contract text). `keeper.MINIGAME_TYPES` and the prompt's minigame
    section derive from it (filtered by the campaign's setting); `interface/minigames.RENDERERS`
-   must cover exactly the catalog — `test_minigame_catalog.py` enforces parity. To add a
-   minigame: 1 catalog entry + 1 renderer, done.
+   and `web/src/minigames.tsx` `GAMES` must each cover exactly the catalog —
+   `test_minigame_catalog.py` enforces parity. To add a minigame: 1 catalog entry + 1 web
+   game (+ 1 Streamlit renderer while that UI lives).
 3. **Campaign schema**: `campaign.validate` ⟷ `scripter.ARCHITECT_INSTRUCTION_TEMPLATE` ⟷ sample `the_haunting.yaml`.
 4. **Save format**: `GameState`/`CharacterState` fields — add with defaults only (old saves must
    keep loading). New character ids must go through `unique_id()`, never assigned directly.
-5. **Live turn loop**: `engine.keeper_steps()` yields ⟷ `app.advance_turn()` runs one beat per
-   rerun. Any new LLM work inside a turn must `yield` a label, or it will block the UI.
+5. **Live turn loop**: `engine.keeper_steps()` yields ⟷ `server.stream_turn()` sends one NDJSON
+   line per beat (and `app.advance_turn()` runs one beat per rerun in Streamlit). Any new LLM work inside a turn must `yield` a label, or it will block the UI.
    Message roles the transcript renders: `keeper`, `player`, `companion`, `dice`, `researcher`,
    `ooc`.
 6. **Character authority**: `keeper.character_authority_clause(state)` ⟷ `state.companion_style`
@@ -85,7 +89,7 @@ they never spend a turn, roll dice, or change scene/plot state.
 ```
 test_rules.py test_keeper_parser.py test_engine.py test_party_modes.py test_memory.py
 test_scripter.py test_memory_character.py test_id_collision.py test_new_systems.py
-test_minigame_catalog.py test_authority.py test_protagonist.py
+test_minigame_catalog.py test_authority.py test_protagonist.py test_server.py
 ```
 
 `python -m core.campaign <file>` validates a campaign file; `python cli_play.py --mock` plays

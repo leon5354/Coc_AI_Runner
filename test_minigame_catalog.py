@@ -10,6 +10,13 @@ assert set(RENDERERS) == cat.types(), (set(RENDERERS) ^ cat.types())
 assert set(ICONS) == cat.types()
 assert MINIGAME_TYPES == cat.types()
 
+# --- the web app's GAMES registry covers exactly the catalog too ---
+import re
+web = open("web/src/minigames.tsx", encoding="utf-8").read()
+games_block = web[web.index("export const GAMES"):].split("}", 1)[0]
+web_games = set(re.findall(r"^\s*(\w+):", games_block, re.M))
+assert web_games == cat.types(), (web_games ^ cat.types())
+
 # --- setting filtering ---
 assert "combination_lock" in cat.for_setting("cthulhu")
 assert "combination_lock" not in cat.for_setting("forgotten_realms")   # no dial safes in Faerûn

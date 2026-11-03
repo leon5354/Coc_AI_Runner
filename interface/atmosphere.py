@@ -16,17 +16,10 @@ MOODS = {
     "night":     {"bg": "linear-gradient(180deg,#0b0e16 0%,#121826 100%)", "drone": 55},
     "unearthly": {"bg": "linear-gradient(180deg,#0c140f 0%,#1a2418 100%)", "drone": 66},
 }
-_ESCALATION = ["daylight", "dusk", "night", "unearthly"]
 
 
 def scene_mood(campaign, scene_id: str) -> str:
-    scene = campaign.scene(scene_id) or {}
-    if scene.get("mood") in MOODS:
-        return scene["mood"]
-    ids = [s["id"] for s in campaign.scenes]
-    idx = ids.index(scene_id) if scene_id in ids else 0
-    return _ESCALATION[min(len(_ESCALATION) - 1,
-                           idx * len(_ESCALATION) // max(len(ids), 1))]
+    return campaign.mood(scene_id)
 
 
 def inject_scene_style(mood: str, stress_ratio: float):

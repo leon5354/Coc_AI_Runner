@@ -44,7 +44,7 @@ Thumbs.db
 
 # Project Specific
 # Ignore temporary save files, runtime logs, and user-dropped audio
-data/saves/*.json
+data/saves/**/*.json
 data/campaigns/*_save.json
 data/campaigns/*_memory.json
 data/logs/
@@ -52,3 +52,7 @@ data/audio/
 improvement_notes.txt
 test_game_loop.py
 test_llm_client.py
+
+# web frontend
+web/node_modules/
+web/dist/

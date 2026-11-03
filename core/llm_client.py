@@ -43,6 +43,14 @@ def _log_call(kind, provider, model, messages, system_prompt, output, t0):
     except Exception:
         pass
 
+
+# Curated OpenRouter picks (price/value for narrative play, July 2026) — free text still allowed.
+MAIN_MODELS = ["x-ai/grok-4.20", "x-ai/grok-4.5", "anthropic/claude-sonnet-5",
+               "google/gemini-3.5-flash", "qwen/qwen3.7-max", "minimax/minimax-m3"]
+UTIL_MODELS = ["google/gemini-3.1-flash-lite", "qwen/qwen3.7-plus", "minimax/minimax-m3",
+               "tencent/hy3", "stepfun/step-3.7-flash"]
+PROVIDERS = ["openrouter", "google", "ollama"]
+
 class LLMClient:
     """
     Unified LLM Client for Coc_AI_Runner.
