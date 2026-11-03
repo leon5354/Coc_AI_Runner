@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased] - Web app
+### Added
+- **Web app**: a FastAPI server (`server/`) wraps the engine; a React + TypeScript frontend
+  (`web/`) replaces Streamlit's redraw-on-every-click UI. Everything carries over: live
+  beat-by-beat turns, roll gate + negotiation, all 9 minigames, dice, mood backgrounds, sanity
+  vignette, ambience, party/inner-life/character editing, minigame tester, undo, export, and
+  the Scenario Architect. Works on phones.
+- `run_web.bat` / `python -m server [--mock]`: one command to set up, build, and open it.
+- `test_server.py`: a full mock session over HTTP, offline.
+### Changed
+- Mock mode saves to `data/saves/mock/` so test games never overwrite real saves.
+- Restart asks before deleting a save.
+### Fixed
+- Candle (burn reveal) heat was tied to how many ticks fired, not time — a fast sweep warmed
+  ink faster than holding still. Now time-based, same overall speed (web version).
+
 ## [4.0.0] - 2026-07-15 (Multi-System TRPG)
 Grew from a Call of Cthulhu-only tool into a general tabletop RPG engine.
 ### Added

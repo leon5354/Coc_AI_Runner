@@ -186,3 +186,21 @@ sequencing confirmed in-browser: Keeper reply on screen while the companion was 
   cinematic` (novels are correct there); the Slaanesh save is `player` and companions were already
   restrained. Two-and-a-half campaigns predate the protagonist fix (generic "Player"/CoC sheet);
   fixed the WFRP one's campaign + live save to the intended Inquisitor (Cool 65, bolt pistol).
+
+**Web app, phase 1 (2026-11-02):**
+- `server/app.py` (FastAPI) wraps the engine; `web/` (React 19 + TS + Vite 8) is the new UI.
+  Turns stream as NDJSON straight from `keeper_steps()` — same beat-by-beat feel as the
+  Streamlit rerun loop, without the reruns. Streamlit UI kept working alongside for now.
+- Moved shared bits into core so both UIs use one copy: `Campaign.mood()` (was
+  `atmosphere.scene_mood`), `Engine.transcript_md()`, model lists in `core/llm_client.py`.
+- Mock mode now saves under `data/saves/mock/` — the scripted keeper would otherwise
+  overwrite a real `the_haunting` save.
+- Minigame answers still ride in the payload to the browser (fine locally); check guesses
+  server-side when online rooms arrive.
+- GOTCHA: newer Chrome returns a Promise from `scrollIntoView`. An arrow effect
+  `useEffect(() => el.scrollIntoView())` hands that Promise to React as "cleanup" and the
+  whole page white-screens on the next unmount. Always use braces in effects.
+- Burn reveal: the Streamlit JS never advanced `lastTs`, so every 40ms tick counted as 0.12s
+  and mouse moves added extra heat. Web version is truly time-based with 3x rates (same feel).
+- Verified in-browser (mock): start, act, roll gate + dice, undo, all 9 minigames incl.
+  candle heat and memory-echo playback, talk, ask-the-keeper, settings, phone layout.

@@ -10,7 +10,8 @@ import rules
 CAMPAIGNS_DIR = Path(__file__).resolve().parent.parent / "data" / "campaigns"
 
 
-VALID_MOODS = {"daylight", "dusk", "night", "unearthly"}
+MOOD_ESCALATION = ["daylight", "dusk", "night", "unearthly"]
+VALID_MOODS = set(MOOD_ESCALATION)
 
 
 class CampaignValidationError(Exception):
@@ -46,6 +47,16 @@ class Campaign:
             if s.get("id") == scene_id:
                 return s
         return None
+
+    def mood(self, scene_id: str) -> str:
+        """Scene's declared `mood:`, else escalate daylight -> unearthly by scene position."""
+        scene = self.scene(scene_id) or {}
+        if scene.get("mood") in VALID_MOODS:
+            return scene["mood"]
+        ids = [s["id"] for s in self.scenes]
+        idx = ids.index(scene_id) if scene_id in ids else 0
+        n = len(MOOD_ESCALATION)
+        return MOOD_ESCALATION[min(n - 1, idx * n // max(len(ids), 1))]
 
     def first_scene_id(self) -> str:
         return self.scenes[0]["id"] if self.scenes else ""

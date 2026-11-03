@@ -27,11 +27,7 @@ def get_engine() -> Engine | None:
     return st.session_state.get("engine")
 
 
-# Curated OpenRouter picks (price/value for narrative play, July 2026) — free text still allowed.
-MAIN_MODELS = ["x-ai/grok-4.20", "x-ai/grok-4.5", "anthropic/claude-sonnet-5",
-               "google/gemini-3.5-flash", "qwen/qwen3.7-max", "minimax/minimax-m3"]
-UTIL_MODELS = ["google/gemini-3.1-flash-lite", "qwen/qwen3.7-plus", "minimax/minimax-m3",
-               "tencent/hy3", "stepfun/step-3.7-flash"]
+from core.llm_client import MAIN_MODELS, UTIL_MODELS  # noqa: E402
 CUSTOM = "custom..."
 
 
@@ -280,21 +276,10 @@ def render_sidebar(engine: Engine | None):
                 for k in ("last_roll", "turn_gen", "turn_label"):
                     st.session_state.pop(k, None)   # an in-flight turn would hold a stale state
                 st.rerun()
-        c2.download_button("📜 Export", data=_transcript_md(engine),
+        c2.download_button("📜 Export", data=engine.transcript_md(),
                            file_name=f"{engine.campaign.title}.md",
                            mime="text/markdown", width="stretch",
                            help="Download the full session transcript as Markdown")
-
-
-def _transcript_md(engine) -> str:
-    state = engine.state
-    lines = [f"# {engine.campaign.title}", ""]
-    for m in state.messages_archive + state.messages:
-        who = m.get("name") or m["role"].capitalize()
-        lines.append(f"**{who}:** {m['content']}\n")
-    if state.dice_log:
-        lines += ["---", "## Dice log", ""] + [f"- {l}" for l in state.dice_log]
-    return "\n".join(lines)
 
 
 def render_transcript(state):

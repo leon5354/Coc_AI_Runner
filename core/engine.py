@@ -266,6 +266,17 @@ class Engine:
         self.state.save()
         return char
 
+    def transcript_md(self) -> str:
+        """Full session transcript as Markdown (export)."""
+        st = self.state
+        lines = [f"# {self.campaign.title}", ""]
+        for m in st.messages_archive + st.messages:
+            who = m.get("name") or m["role"].capitalize()
+            lines.append(f"**{who}:** {m['content']}\n")
+        if st.dice_log:
+            lines += ["---", "## Dice log", ""] + [f"- {l}" for l in st.dice_log]
+        return "\n".join(lines)
+
     def consult_researcher(self, query: str, use_web: bool = False) -> str:
         from agents.researcher import Researcher
         if self._researcher is None:
