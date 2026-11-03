@@ -1,6 +1,13 @@
+import json
 import os
+import re
+import shutil
+import subprocess
+import tempfile
 import time
 import logging
+
+import requests
 from dotenv import load_dotenv
 
 # Try importing OpenAI, handle if not installed (though it should be)
@@ -49,7 +56,29 @@ MAIN_MODELS = ["x-ai/grok-4.20", "x-ai/grok-4.5", "anthropic/claude-sonnet-5",
                "google/gemini-3.5-flash", "qwen/qwen3.7-max", "minimax/minimax-m3"]
 UTIL_MODELS = ["google/gemini-3.1-flash-lite", "qwen/qwen3.7-plus", "minimax/minimax-m3",
                "tencent/hy3", "stepfun/step-3.7-flash"]
-PROVIDERS = ["openrouter", "google", "ollama"]
+PROVIDERS = ["ollama", "claude_cli", "openrouter", "google"]
+
+
+CLAUDE_MODELS = ["sonnet", "opus", "haiku"]
+OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "16384"))   # Ollama's default 4096 would cut off the Keeper's prompt
+_THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
+
+
+def ollama_base(base_url=None) -> str:
+    base = (base_url or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/")
+    return base[:-3].rstrip("/") if base.endswith("/v1") else base
+
+
+class LLMError(Exception):
+    """The model could not answer. The turn stops; nothing is written into the story."""
+
+
+def check_llm(text):
+    """chat() reports failures as a marked string; turn that back into an exception."""
+    if text and text.startswith("[SYSTEM ERROR]"):
+        raise LLMError(text)
+    return text
+
 
 class LLMClient:
     """
@@ -57,7 +86,8 @@ class LLMClient:
     Supports:
     1. Google Gemini (via google-genai-sdk)
     2. OpenRouter (via openai-sdk)
-    3. Ollama (via openai-sdk compatible endpoint)
+    3. Ollama (local GPU, no key; native API so the context size can be set)
+    4. claude_cli (your Claude subscription through the logged-in `claude` command, no key)
     """
     def __init__(self, provider=None, model_name=None, api_key=None, base_url=None):
         self.provider = (provider or os.getenv("LLM_PROVIDER", "openrouter")).lower()
@@ -96,15 +126,12 @@ class LLMClient:
             )
 
         elif self.provider == "ollama":
-            if not OpenAI:
-                raise ImportError("openai module not found. Install with `pip install openai`")
-            
-            # Ollama local endpoint
-            base = self.base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-            self.client = OpenAI(
-                base_url=base,
-                api_key="ollama", # Key is required but ignored by Ollama
-            )
+            self.base = ollama_base(self.base_url)
+
+        elif self.provider == "claude_cli":
+            self.exe = shutil.which("claude")
+            if not self.exe:
+                raise ValueError("The `claude` command was not found. Install Claude Code first.")
 
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
@@ -118,6 +145,11 @@ class LLMClient:
         clean = [{"role": m["role"], "content": m["content"]} for m in messages]
         t0 = time.time()
         try:
+            if self.provider in ("ollama", "claude_cli"):
+                run = self._chat_ollama if self.provider == "ollama" else self._chat_claude
+                out = run(clean, system_prompt, temperature, max_tokens)
+                _log_call("chat", self.provider, self.model_name, messages, system_prompt, out, t0)
+                return out
             if self.provider == "google":
                 contents = [
                     types.Content(role="model" if m["role"] == "assistant" else "user",
@@ -151,14 +183,55 @@ class LLMClient:
             logger.error(f"LLM Chat Error: {e}")
             return f"[SYSTEM ERROR] The connection to beyond falters... (API Error: {str(e)})"
 
+    def _chat_ollama(self, messages, system_prompt, temperature, max_tokens, json_mode=False):
+        if "qwen3" in self.model_name.lower():   # these GGUFs ignore think:false
+            system_prompt = (system_prompt or "") + " /no_think"
+        msgs = ([{"role": "system", "content": system_prompt}] if system_prompt else []) + messages
+        body = {"model": self.model_name, "messages": msgs, "stream": False, "think": False,
+                "options": {"temperature": temperature, "num_ctx": OLLAMA_NUM_CTX, "num_predict": max_tokens}}
+        if json_mode:
+            body["format"] = "json"
+        r = requests.post(f"{self.base}/api/chat", json=body, timeout=900)
+        if r.status_code != 200:
+            raise RuntimeError(f"Ollama {r.status_code}: {r.text[:200]}")
+        return _THINK_RE.sub("", r.json()["message"]["content"]).strip()
+
+    def _chat_claude(self, messages, system_prompt, temperature=None, max_tokens=None):
+        """One headless `claude -p` call. Uses the plan login; no tools, no project context."""
+        prompt = "\n\n".join(f"[{'TABLE' if m['role'] == 'user' else 'YOU SAID EARLIER'}]\n{m['content']}"
+                             for m in messages)
+        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}   # never API billing
+        with tempfile.TemporaryDirectory() as tmp:
+            sys_file = os.path.join(tmp, "system.txt")
+            with open(sys_file, "w", encoding="utf-8") as f:
+                f.write(system_prompt or "You are a helpful assistant.")
+            r = subprocess.run(
+                [self.exe, "-p", "--model", self.model_name, "--output-format", "json", "--tools", "",
+                 "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence",
+                 "--disable-slash-commands", "--system-prompt-file", sys_file],
+                input=prompt, capture_output=True, text=True, encoding="utf-8", timeout=600, cwd=tmp, env=env)
+        try:
+            data = json.loads(r.stdout)
+        except json.JSONDecodeError:
+            raise RuntimeError((r.stderr or r.stdout or "no output from claude")[:300])
+        if data.get("is_error"):
+            raise RuntimeError(str(data.get("result"))[:300])
+        return data.get("result") or ""
+
     def get_completion(self, prompt, system_prompt=None, temperature=0.7, max_tokens=8192, json_mode=False):
         """
         Unified method to get a text completion.
         """
         try:
+            msgs = [{"role": "user", "content": prompt}]
+            if self.provider == "ollama":
+                return self._chat_ollama(msgs, system_prompt, temperature, max_tokens, json_mode)
+            if self.provider == "claude_cli":
+                out = self._chat_claude(msgs, system_prompt, temperature, max_tokens).strip()
+                return re.sub(r"^```(?:json)?\s*|\s*```$", "", out)
             if self.provider == "google":
                 return self._query_google(prompt, system_prompt, temperature, max_tokens, json_mode)
-            elif self.provider in ["openrouter", "ollama"]:
+            elif self.provider == "openrouter":
                 return self._query_openai_compatible(prompt, system_prompt, temperature, max_tokens, json_mode)
         except Exception as e:
             logger.error(f"LLM Generation Error: {e}")
@@ -208,6 +281,8 @@ class LLMClient:
     def check_connection(self):
         """Simple ping to verify connectivity."""
         try:
+            if self.provider in ("ollama", "claude_cli"):
+                return not self.chat([{"role": "user", "content": "Ping"}], max_tokens=4).startswith("[SYSTEM ERROR]")
             if self.provider == "google":
                 self.client.models.generate_content(model=self.model_name, contents="Ping")
             else:

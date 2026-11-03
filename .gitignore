@@ -56,3 +56,4 @@ test_llm_client.py
 # web frontend
 web/node_modules/
 web/dist/
+data/settings.json

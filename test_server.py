@@ -55,7 +55,7 @@ assert c.post("/api/game/act", json={"character_id": pid, "text": "x"}).status_c
 
 # roll: dice result rides on the first line, keeper outcome after (clue + stress applied)
 lines = turn("/api/game/roll")
-assert "dice" in lines[0] and lines[0]["dice"]["roll"] >= 1
+assert lines[0]["dice"][0]["roll"] >= 1 and lines[0]["dice"][0]["dice"]
 st = lines[-1]["game"]["state"]
 assert st["pending_roll"] is None
 assert any(m["role"] == "dice" for m in st["messages"])

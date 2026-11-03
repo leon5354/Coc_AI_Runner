@@ -2,12 +2,9 @@
 from core import minigames_catalog as cat
 from core.campaign import Campaign
 from core.keeper import MINIGAME_TYPES, build_system_prompt, parse_response
-from interface.minigames import ICONS, RENDERERS
 import rules
 
-# --- parity: every catalog game has a renderer + icon, and vice versa ---
-assert set(RENDERERS) == cat.types(), (set(RENDERERS) ^ cat.types())
-assert set(ICONS) == cat.types()
+# --- parity: keeper contract and catalog agree ---
 assert MINIGAME_TYPES == cat.types()
 
 # --- the web app's GAMES registry covers exactly the catalog too ---

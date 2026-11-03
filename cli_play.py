@@ -54,6 +54,7 @@ class MockLLM:
     def chat(self, messages, system_prompt=None, **kw):
         # Non-keeper callers get their own canned reply (and don't advance the keeper script).
         from agents.researcher import SYSTEM_PROMPT as ARCHIVIST
+        from core.engine import ITEM_PROMPT
         from core.keeper import OOC_PROMPT
         from core.memory import CHARACTER_MEMORY_PROMPT, SUMMARIZE_PROMPT
         sp = system_prompt or ""
@@ -65,6 +66,8 @@ class MockLLM:
             return "(mock) Out of character: you can search the parlor, question Knott again, or head upstairs."
         if sp.startswith(ARCHIVIST):
             return "(mock) A yellowed clipping: 'MARSH LANE TENANTS FLEE — THIRD FAMILY IN TWO YEARS.'"
+        if sp == ITEM_PROMPT:
+            return "(mock) Worn from use, heavier than it looks."
         if sp == SUMMARIZE_PROMPT:
             return "STORY: (mock) The investigators took Knott's case and entered the house on Marsh Lane."
         if sp == CHARACTER_MEMORY_PROMPT:

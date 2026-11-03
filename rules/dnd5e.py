@@ -30,15 +30,20 @@ class DnD5e(RuleSystem):
             tier = "Success" if success else "Failure"
         adv = " (advantage)" if net > 0 else (" (disadvantage)" if net < 0 else "")
         detail = f"d20={d20}{adv} {skill_value:+d} = {total} vs DC {dc} ({difficulty}) -> {tier}"
-        return RollResult(roll=d20, target=dc, tier=tier, success=success, detail=detail)
+        kept = rolls.index(d20)
+        dice = [{"die": "d20", "value": r, "kept": i == kept} for i, r in enumerate(rolls)]
+        return RollResult(roll=d20, target=dc, tier=tier, success=success, detail=detail, dice=dice)
+
+    def roll_preview(self, skill_value: int, difficulty: str) -> str:
+        return f"d20 {skill_value:+d} vs DC {DC.get(difficulty, 15)}"
 
     def keeper_rules_prompt(self) -> str:
         return """=== RULE SYSTEM: Dungeons & Dragons 5e ===
 - Ability/skill checks are d20 + the character's modifier vs a Difficulty Class (DC).
 - Difficulties map to DC: easy=10, medium=15, hard=20, very_hard=25. Pick one per check.
 - If the player describes an action without a skill, choose the fitting ability/skill.
-- Grant "advantage" by requesting the roll and noting it (the engine rolls two d20, keeps the
-  best); "disadvantage" keeps the worst. Only call for rolls on uncertain, meaningful actions.
+- Advantage: add "bonus": 1 to roll_request (the engine rolls two d20, keeps the best).
+  Disadvantage: add "penalty": 1 (keeps the worst). Only call for rolls on uncertain, meaningful actions.
 - Natural 20 is a critical success, natural 1 an automatic failure.
 - There is no sanity mechanic — never request stress_check. Harm is hp_change (Hit Points)."""
 

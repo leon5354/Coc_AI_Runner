@@ -2,7 +2,7 @@
 plus a Resolve pool that erodes with corruption/terror (mapped onto the stress mechanic)."""
 import random
 
-from rules.base import RollResult, RuleSystem, parse_dice, validate_dice
+from rules.base import RollResult, RuleSystem, parse_dice, percentile_dice, validate_dice
 
 # difficulty label -> modifier applied to the target number
 DIFF_MOD = {"easy": +40, "average": +20, "challenging": 0, "hard": -20}
@@ -17,10 +17,11 @@ class WFRP(RuleSystem):
     def skill_check(self, skill_value: int, difficulty: str = "average",
                     bonus_dice: int = 0, penalty_dice: int = 0) -> RollResult:
         difficulty = difficulty if difficulty in DIFF_MOD else "average"
-        target = max(3, min(97, skill_value + DIFF_MOD[difficulty] + 10 * (bonus_dice - penalty_dice)))
+        target = max(1, skill_value + DIFF_MOD[difficulty] + 10 * (bonus_dice - penalty_dice))
         roll = random.randint(1, 100)
-        success = roll <= target
-        sl = (target - roll) // 10   # degrees of success (positive) / failure (negative)
+        # 4e: 01-05 always succeed, 96-100 always fail, whatever the target
+        success = roll <= 5 or (roll <= target and roll < 96)
+        sl = target // 10 - roll // 10   # Success Levels: tens of target minus tens of roll
         doubles = roll % 11 == 0     # 11,22,...,99 (and 100 handled below)
         if roll == 100:
             tier, success = "Fumble", False
@@ -33,7 +34,8 @@ class WFRP(RuleSystem):
         else:
             tier = "Failure"
         detail = f"d100={roll} vs {target} ({difficulty}) -> {tier} (SL {sl:+d})"
-        return RollResult(roll=roll, target=target, tier=tier, success=success, detail=detail)
+        return RollResult(roll=roll, target=target, tier=tier, success=success, detail=detail,
+                          dice=percentile_dice(roll))
 
     def stress_check(self, current: int, loss_expr: str):
         """A Cool/Resolve test against corruption or terror. loss_expr like '0/1d10' or '1d6'."""
@@ -43,6 +45,7 @@ class WFRP(RuleSystem):
         passed = roll <= current
         loss = parse_dice(on_success if passed else on_fail)
         new = max(0, current - loss)
+        self.last_stress = {"roll": roll, "passed": passed, "dice": percentile_dice(roll)}
         line = (f"Resolve test d100={roll} vs {current} -> "
                 f"{'held' if passed else 'shaken'}, lost {loss} Resolve ({current} -> {new})")
         return new, line
@@ -55,12 +58,16 @@ class WFRP(RuleSystem):
         return """=== RULE SYSTEM: Warhammer Fantasy Roleplay ===
 - Skill tests are d100 roll-under a target (characteristic + skill). Difficulties modify the
   target: easy +40, average +20, challenging +0, hard -20. Pick one per test.
-- Success Level (SL) = (target - roll)/10; higher is better. Doubles on a success are a
-  critical, doubles on a failure a fumble; 100 always fumbles.
+- Success Level (SL) = tens of target minus tens of roll; higher is better. 01-05 always
+  succeed, 96-100 always fail. Doubles on a success are a critical, doubles on a failure a
+  fumble; 100 always fumbles. Add "bonus": 1 or "penalty": 1 to roll_request for +10 / -10.
 - Resolve/corruption: the grim world erodes the mind. Request stress_check when a character
   faces terror, the warp, or moral horror. Loss like "0/1d10" (success/failure). At 0 Resolve
   a character breaks (gains a psychosis).
 - The Old World is dangerous and unfair — reward cunning, punish recklessness."""
+
+    def roll_preview(self, skill_value: int, difficulty: str) -> str:
+        return f"d100 under {max(1, skill_value + DIFF_MOD.get(difficulty, 20))}"
 
     def character_sheet_defaults(self) -> dict:
         return {

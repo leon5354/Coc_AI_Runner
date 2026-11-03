@@ -2,7 +2,7 @@
 import random
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -12,6 +12,7 @@ class RollResult:
     tier: str          # system-specific, e.g. "Critical Success" .. "Fumble"
     success: bool
     detail: str        # human-readable line for the dice log
+    dice: list = field(default_factory=list)   # physical dice shown: [{die, value, kept}]
 
 
 _DICE_RE = re.compile(r"^\s*(\d*)d(\d+)\s*([+-]\s*\d+)?\s*$", re.IGNORECASE)
@@ -31,6 +32,12 @@ def parse_dice(expr) -> int:
     sides = int(m.group(2))
     mod = int(m.group(3).replace(" ", "")) if m.group(3) else 0
     return sum(random.randint(1, sides) for _ in range(num)) + mod
+
+
+def percentile_dice(roll: int) -> list:
+    """The two physical d10s behind a d100 result: tens die (00-90) + units die (0-9)."""
+    return [{"die": "d100", "value": (roll % 100) // 10 * 10, "kept": True},
+            {"die": "d10", "value": roll % 10, "kept": True}]
 
 
 def validate_dice(expr) -> bool:
@@ -75,3 +82,14 @@ class RuleSystem(ABC):
 
     def default_skill_target(self) -> int:
         return 50
+
+    def roll_preview(self, skill_value: int, difficulty: str) -> str:
+        """Short 'what you need' line shown before a roll."""
+        return f"d100 under {skill_value}"
+
+    def chance(self, skill_value: int, difficulty: str, bonus: int = 0, penalty: int = 0) -> int:
+        """Success chance in percent."""
+        # ponytail: sampled, not solved — stays right for every system, bonus dice included
+        n = 2000
+        hits = sum(self.skill_check(skill_value, difficulty, bonus, penalty).success for _ in range(n))
+        return round(100 * hits / n)

@@ -42,6 +42,7 @@ class CharacterState:
     private_thoughts: list = field(default_factory=list)  # recent inner monologue, rolling window
     memory_summary: str = ""         # their own chronicle: what THEY lived through, in their voice
     relationships: dict = field(default_factory=dict)  # name -> what they privately think of them
+    item_notes: dict = field(default_factory=dict)     # item name -> description, filled on inspect
 
 
 @dataclass
@@ -68,6 +69,8 @@ class GameState:
     minigame_count: int = 0          # total minigames launched — gives each a unique widget key
     rolls_since_action: int = 0      # human rolls since the player last acted (chain guard)
     dice_log: list = field(default_factory=list)
+    ending: dict = None              # {outcome, description} once the story concludes
+    stats: dict = field(default_factory=dict)  # rolls/crits/fumbles counters for the end screen
 
     # --- lookups ---
     def get_character(self, char_id: str):

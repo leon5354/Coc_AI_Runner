@@ -5,15 +5,19 @@ keeper_steps() generator already yields per beat, so each line is one thing happ
 """
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
 import threading
 from dataclasses import asdict
 from pathlib import Path
 
+import requests
 import yaml
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -29,7 +33,8 @@ from core import minigames_catalog as mc  # noqa: E402
 from core.engine import Engine, new_game  # noqa: E402
 from core.game_state import GameState, save_exists, slugify, unique_id  # noqa: E402
 from core.keeper import LANGUAGE_LABELS  # noqa: E402
-from core.llm_client import MAIN_MODELS, PROVIDERS, UTIL_MODELS  # noqa: E402
+from core.llm_client import (CLAUDE_MODELS, MAIN_MODELS, PROVIDERS, UTIL_MODELS, LLMError,  # noqa: E402
+                             ollama_base)
 
 app = FastAPI(title="AI TTRPG Runner")
 AUDIO = ROOT / "data" / "audio"   # optional BGM: drop .mp3/.ogg/.wav files here
@@ -37,12 +42,15 @@ AUDIO = ROOT / "data" / "audio"   # optional BGM: drop .mp3/.ogg/.wav files here
 # ponytail: one game per server process (local play). Rooms/sessions arrive with online multiplayer.
 ENGINE: Engine | None = None
 BUSY = threading.Lock()   # one turn at a time; a second request while a turn runs gets 409
+SETTINGS = ROOT / "data" / "settings.json"   # the brain picked in the app; wins over .env
 LLM_CFG = {
-    "provider": os.getenv("LLM_PROVIDER", "openrouter"),
-    "model": os.getenv("LLM_MODEL", "x-ai/grok-4.20"),
-    "util_provider": os.getenv("UTILITY_PROVIDER") or os.getenv("LLM_PROVIDER", "openrouter"),
+    "provider": os.getenv("LLM_PROVIDER", "ollama"),
+    "model": os.getenv("LLM_MODEL", ""),
+    "util_provider": os.getenv("UTILITY_PROVIDER") or os.getenv("LLM_PROVIDER", "ollama"),
     "util_model": os.getenv("UTILITY_MODEL", ""),
 }
+if SETTINGS.exists():
+    LLM_CFG.update(json.loads(SETTINGS.read_text(encoding="utf-8")))
 
 
 def mock() -> bool:
@@ -65,6 +73,11 @@ def make_llms():
     return main, util
 
 
+@app.exception_handler(LLMError)
+def llm_failed(_: Request, e: LLMError):
+    return JSONResponse(status_code=502, content={"detail": str(e).replace("[SYSTEM ERROR] ", "")})
+
+
 def engine() -> Engine:
     if ENGINE is None:
         raise HTTPException(409, "No game running — start a campaign first.")
@@ -76,15 +89,30 @@ def game_view():
         return None
     e, s = ENGINE, ENGINE.state
     scene = e.campaign.scene(s.scene_id) or {}
+    seen = set(s.visited_scenes)
+    near = {x["to"] for c in e.campaign.scenes if c["id"] in seen for x in c.get("exits", [])}
+    clues = [{"id": cid, "name": (e.campaign.clue(cid) or {}).get("description", cid),
+              "text": (e.campaign.clue(cid) or {}).get("reveals", "")} for cid in s.discovered_clues]
     return {
         "state": asdict(s),
         "title": e.campaign.title,
         "campaign": Path(s.campaign_file).stem,
         "scene_name": scene.get("name", "?"),
+        "scene_text": scene.get("description", ""),
+        "scene_art": scene.get("art", ""),
+        "scene_index": next((i for i, c in enumerate(e.campaign.scenes) if c["id"] == s.scene_id), 0),
         "mood": e.campaign.mood(s.scene_id),
         "dice_spec": e.system.dice_spec(),
         "has_stress": e.system.has_stress,
+        "stress_name": "Sanity" if s.rule_system == "coc7e" else "Resolve",
+        "rule_label": e.system.label,
         "can_undo": e._undo_snapshot is not None,
+        "roll_preview": e.roll_preview(),
+        "clues": clues,
+        "clues_total": len(e.campaign.all_clue_ids()),
+        "map": [{"id": c["id"], "name": c.get("name", "?") if c["id"] in seen else "???",
+                 "visited": c["id"] in seen, "exits": [x["to"] for x in c.get("exits", [])]}
+                for c in e.campaign.scenes if c["id"] in seen or c["id"] in near],
     }
 
 
@@ -107,15 +135,17 @@ def _begin(fn, *args):
         raise
 
 
-def stream_turn(gen, label: str, extra: dict = None):
+def stream_turn(gen, label: str):
     """Drive a keeper_steps/talk_steps generator, one NDJSON line per beat. Caller holds BUSY."""
     def run():
         try:
-            yield _line({"label": label, "game": game_view(), **(extra or {})})
+            yield _line({"label": label, "game": game_view(), "dice": ENGINE.drain_events()})
             for nxt in gen:
-                yield _line({"label": nxt, "game": game_view()})
-            yield _line({"done": True, "game": game_view()})
-        except Exception as e:   # LLM/network failure: state is saved per beat, so nothing is lost
+                yield _line({"label": nxt, "game": game_view(), "dice": ENGINE.drain_events()})
+            yield _line({"done": True, "game": game_view(), "dice": ENGINE.drain_events()})
+        except LLMError as e:    # the story stays clean; Undo + send again retries
+            yield _line({"done": True, "error": str(e).replace("[SYSTEM ERROR] ", ""), "game": game_view()})
+        except Exception as e:   # state is saved per beat, so nothing is lost
             yield _line({"done": True, "error": f"{type(e).__name__}: {e}", "game": game_view()})
         finally:
             BUSY.release()
@@ -136,12 +166,19 @@ def _guarded(fn):
 @app.get("/api/meta")
 def meta():
     from agents.lore import DEFAULT_SETTING, SETTING_WIKIS
-    camps = [{"file": p.name, "name": p.stem, "has_save": save_exists(p) is not None}
-             for p in campaign_mod.list_campaigns()]
+    camps = []
+    for p in campaign_mod.list_campaigns():
+        c = campaign_mod.load(p)
+        first = c.scenes[0] if c.scenes else {}
+        camps.append({"file": p.name, "name": p.stem, "title": c.title, "has_save": save_exists(p) is not None,
+                      "system": rules.get_system(c.rule_system).label, "intro": c.introduction.strip()[:220],
+                      "mood": c.mood(first.get("id", "")), "scene_name": first.get("name", ""),
+                      "scene_text": first.get("description", ""), "scene_art": first.get("art", "")})
     return {
         "mock": mock(),
         "llm": LLM_CFG,
         "providers": PROVIDERS, "main_models": MAIN_MODELS, "util_models": UTIL_MODELS,
+        "claude_models": CLAUDE_MODELS,
         "languages": LANGUAGE_LABELS,
         "campaigns": camps,
         "rule_systems": rules.available_systems(),
@@ -152,6 +189,91 @@ def meta():
         "audio": sorted(p.name for p in AUDIO.iterdir() if p.suffix.lower() in (".mp3", ".ogg", ".wav"))
         if AUDIO.exists() else [],
     }
+
+
+def _ollama_models() -> list | None:
+    """Installed models, or None if Ollama isn't reachable."""
+    try:
+        r = requests.get(f"{ollama_base()}/api/tags", timeout=2)
+        return [{"name": m["name"], "gb": round(m["size"] / 1e9, 1)} for m in r.json()["models"]]
+    except (requests.RequestException, KeyError, ValueError):
+        return None
+
+
+def _gpu() -> dict | None:
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                             capture_output=True, text=True, timeout=5).stdout.strip().splitlines()[0]
+        name, mem = out.rsplit(",", 1)
+        return {"name": name.strip(), "gb": round(int(mem) / 1024)}
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return None
+
+
+def _claude_status() -> dict:
+    exe = shutil.which("claude")
+    if not exe:
+        return {"installed": False, "logged_in": False}
+    try:
+        r = subprocess.run([exe, "auth", "status"], capture_output=True, text=True, timeout=15)
+        return {"installed": True, "logged_in": bool(json.loads(r.stdout).get("loggedIn"))}
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return {"installed": True, "logged_in": False}
+
+
+@app.get("/api/llm/options")
+def llm_options():
+    """What brains this PC can use. Starts Ollama if it's installed but asleep."""
+    models = _ollama_models()
+    exe = shutil.which("ollama")
+    if models is None and exe:
+        subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"ollama": {"installed": bool(exe), "running": models is not None, "models": models or []},
+            "gpu": _gpu(), "claude": _claude_status(),
+            "keys": {"openrouter": bool(os.getenv("OPENROUTER_API_KEY")),
+                     "google": bool(os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"))}}
+
+
+def _hf_name(text: str) -> str:
+    """Accept a Hugging Face link or an Ollama model name; return the Ollama name."""
+    name = re.sub(r"^https?://(www\.)?(huggingface\.co|hf\.co)/", "hf.co/", text.strip())
+    name = name.split("?")[0].rstrip("/")
+    if not re.fullmatch(r"[\w.\-/:]+", name):
+        raise HTTPException(400, "That doesn't look like a model name.")
+    return name
+
+
+class ModelIn(BaseModel):
+    name: str
+
+
+@app.post("/api/llm/pull")
+def pull_model(body: ModelIn):
+    """Download a model into Ollama. Streams progress as NDJSON: {status, percent}."""
+    name = _hf_name(body.name)
+
+    def run():
+        try:
+            with requests.post(f"{ollama_base()}/api/pull", json={"model": name, "stream": True},
+                               stream=True, timeout=(5, 3600)) as r:
+                for raw in r.iter_lines():
+                    d = json.loads(raw)
+                    pct = round(100 * d["completed"] / d["total"]) if d.get("total") and d.get("completed") else None
+                    yield _line({"status": d.get("error") or d.get("status", ""), "percent": pct,
+                                 "error": bool(d.get("error"))})
+            yield _line({"done": True, "name": name})
+        except requests.RequestException as e:
+            yield _line({"done": True, "error": str(e)})
+    return StreamingResponse(run(), media_type="application/x-ndjson")
+
+
+@app.post("/api/llm/remove")
+def remove_model(body: ModelIn):
+    """Delete an installed model. The page asks the player to confirm first."""
+    r = requests.delete(f"{ollama_base()}/api/delete", json={"model": _hf_name(body.name)}, timeout=30)
+    if r.status_code != 200:
+        raise HTTPException(400, f"Could not remove it: {r.text[:200]}")
+    return {"ok": True}
 
 
 class LLMIn(BaseModel):
@@ -174,6 +296,7 @@ def set_llm(body: LLMIn):
             raise HTTPException(400, str(e))
         _guarded(lambda: ENGINE.set_llm(main, util))
     LLM_CFG.update(cfg)
+    SETTINGS.write_text(json.dumps(LLM_CFG, ensure_ascii=False, indent=2), encoding="utf-8")
     return LLM_CFG
 
 
@@ -203,8 +326,7 @@ def start(body: StartIn):
             state = GameState.load(save) if save else new_game(path)
             main, util = make_llms()
         except (ValueError, ImportError) as e:
-            raise HTTPException(400, f"LLM setup failed: {e}. Copy .env.example to .env and fill "
-                                     "in your provider + API key.")
+            raise HTTPException(400, f"Could not start the AI: {e}. Pick a brain in Settings.")
         except (OSError, campaign_mod.CampaignValidationError) as e:
             raise HTTPException(400, f"Could not load this campaign or save: {e}")
         ENGINE = Engine(state, llm=main, util_llm=util)
@@ -277,10 +399,8 @@ def roll():
     if result is None:
         BUSY.release()
         raise HTTPException(409, "No roll is pending.")
-    dice = {"roll": result.roll, "tier": result.tier, "detail": result.detail,
-            "spec": e.system.dice_spec()}
     return stream_turn(e.keeper_steps("Narrate the outcome of the roll above."),
-                       "The Keeper narrates the outcome…", extra={"dice": dice})
+                       "The Keeper narrates the outcome…")
 
 
 @app.post("/api/game/negotiate")
@@ -320,6 +440,47 @@ def launch_minigame(body: LaunchIn):
     if e.state.pending_minigame:
         raise HTTPException(409, "A minigame is already running.")
     _guarded(lambda: e.launch_minigame(mc.sample(body.type)))
+    return game_view()
+
+
+class FreeRollIn(BaseModel):
+    expr: str
+
+
+@app.post("/api/game/free_roll")
+def free_roll(body: FreeRollIn):
+    """Loose dice from the tray. Logged; changes nothing else."""
+    event = engine().free_roll(body.expr)
+    if not event:
+        raise HTTPException(400, "Try something like 2d6+1 (d4, d6, d8, d10, d12, d20, d100).")
+    return {"dice": event, "game": game_view()}
+
+
+class ItemIn(BaseModel):
+    character_id: str
+    item: str
+    to: str = ""
+
+
+@app.post("/api/game/items/inspect")
+def inspect_item(body: ItemIn):
+    e = engine()
+    return {"note": _guarded(lambda: e.inspect_item(body.character_id, body.item)), "game": game_view()}
+
+
+@app.post("/api/game/items/give")
+def give_item(body: ItemIn):
+    e = engine()
+    if not _guarded(lambda: e.give_item(body.character_id, body.to, body.item)):
+        raise HTTPException(400, "That item or person isn't here.")
+    return game_view()
+
+
+@app.post("/api/game/items/drop")
+def drop_item(body: ItemIn):
+    e = engine()
+    if not _guarded(lambda: e.drop_item(body.character_id, body.item)):
+        raise HTTPException(400, "That item isn't here.")
     return game_view()
 
 
@@ -404,7 +565,7 @@ class ArchitectChatIn(BaseModel):
 def architect_chat(body: ArchitectChatIn):
     from agents.scripter import Scripter
     try:
-        return {"reply": Scripter().chat(body.history)}
+        return {"reply": Scripter(LLM_CFG["provider"], LLM_CFG["model"]).chat(body.history)}
     except (ValueError, ImportError) as e:
         raise HTTPException(400, f"LLM setup failed: {e}")
 
@@ -420,8 +581,8 @@ def architect_generate(body: ArchitectGenIn):
     from agents.scripter import Scripter
     context = "\n".join(f"{m['role']}: {m['content']}" for m in body.history)
     try:
-        text, err = Scripter().generate_campaign(context, rule_system=body.rule_system,
-                                                 setting=body.setting)
+        text, err = Scripter(LLM_CFG["provider"], LLM_CFG["model"]).generate_campaign(
+            context, rule_system=body.rule_system, setting=body.setting)
     except (ValueError, ImportError) as e:
         raise HTTPException(400, f"LLM setup failed: {e}")
     if err:

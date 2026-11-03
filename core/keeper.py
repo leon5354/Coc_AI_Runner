@@ -4,9 +4,10 @@ import re
 from dataclasses import dataclass, field
 
 from core import minigames_catalog
+from core.llm_client import check_llm
 
 CONTROL_KEYS = {"roll_request", "stress_check", "hp_change", "clues_discovered",
-                "scene_transition", "characters_act", "minigame"}
+                "scene_transition", "characters_act", "minigame", "inventory_change", "ending"}
 
 MINIGAME_TYPES = minigames_catalog.types()
 
@@ -15,13 +16,15 @@ RECENT_WINDOW = 20  # messages sent verbatim
 
 @dataclass
 class Control:
-    roll_request: dict = None      # {character, skill, difficulty, reason}
+    roll_request: dict = None      # {character, skill, difficulty, reason, bonus?, penalty?}
     stress_check: dict = None      # {character, event_id, loss}
     hp_change: dict = None         # {character, amount, reason}
     clues_discovered: list = field(default_factory=list)
     scene_transition: str = None
     characters_act: list = field(default_factory=list)
     minigame: dict = None          # {type, ...payload}
+    inventory_change: dict = None  # {character, add: [..], remove: [..]}
+    ending: str = None             # outcome of the campaign ending just reached
 
     @classmethod
     def empty(cls):
@@ -32,15 +35,19 @@ OUTPUT_CONTRACT = '''=== OUTPUT FORMAT (MANDATORY) ===
 Write your narrative as normal prose. Then end EVERY response with exactly one fenced json block:
 
 ```json
-{"roll_request": null, "stress_check": null, "hp_change": null,
- "clues_discovered": [], "scene_transition": null, "characters_act": [], "minigame": null}
+{"roll_request": null, "stress_check": null, "hp_change": null, "inventory_change": null,
+ "clues_discovered": [], "scene_transition": null, "characters_act": [], "minigame": null, "ending": null}
 ```
 
 Field meanings (use null / [] when not applicable this turn):
 - roll_request: ask a character to roll. {"character": "<id>", "skill": "<skill name>", "difficulty": "<level>", "reason": "<why>"}
   When you request a roll, END the narrative at the moment of tension — the outcome comes after the roll.
 - stress_check: a character faces horror. {"character": "<id>", "event_id": "<scripted event id or null>", "loss": "<expr like 0/1d4>"}
-- hp_change: physical harm or healing. {"character": "<id>", "amount": <negative for damage>, "reason": "..."}
+  Optional in roll_request: "bonus": 1 (favourable) or "penalty": 1 (unfavourable), up to 2.
+- hp_change: physical harm or healing. {"character": "<id>", "amount": "<dice or number>", "reason": "..."}
+  Prefer dice so the engine rolls it: "-1d6", "-1d8+1"; healing "+1d4"; or a plain number like -2.
+- inventory_change: items gained or lost in the fiction. {"character": "<id>", "add": ["<item>"], "remove": ["<item>"]}
+  Use it whenever someone picks up, is handed, uses up, or loses something that matters.
 - clues_discovered: list of scripted clue ids the characters just uncovered.
 - scene_transition: the scripted scene id the party moves to (must be one of the listed exits), else null.
 - characters_act: ids of AI-controlled companions who should act next turn (only when their action matters).
@@ -48,6 +55,8 @@ Field meanings (use null / [] when not applicable this turn):
   naturally calls for it, and NEVER together with roll_request. One of:
   {minigame_contract}
   After the minigame you will receive a MINIGAME RESULT message; continue the story from it.
+- ending: when the story truly concludes, the outcome name of the ending reached (from the
+  campaign's possible endings). Write the closing narration in the same message. Otherwise null.
 
 Worked example:
 The floorboards groan as you kneel. Something glints between them — but the light is failing fast.
@@ -333,6 +342,8 @@ def parse_response(text: str):
         scene_transition=data.get("scene_transition") if isinstance(data.get("scene_transition"), str) else None,
         characters_act=[c for c in data.get("characters_act") or [] if isinstance(c, str)],
         minigame=mg,
+        inventory_change=data.get("inventory_change") if isinstance(data.get("inventory_change"), dict) else None,
+        ending=data.get("ending") if isinstance(data.get("ending"), str) and data.get("ending") else None,
     )
     return narrative, ctrl
 
@@ -350,7 +361,8 @@ class Keeper:
         system_prompt = (OOC_PROMPT + "\n\n" + language_block(state.language)
                          + f"\n\n=== WHAT YOU KNOW (KEEPER EYES ONLY — do not spoil) ===\n"
                            f"{self.campaign.plot_outline}")
-        return self.llm.chat(msgs, system_prompt=system_prompt, temperature=0.5, max_tokens=600) or ""
+        return check_llm(self.llm.chat(msgs, system_prompt=system_prompt, temperature=0.5,
+                                       max_tokens=600)) or ""
 
     def respond(self, state, user_input: str):
         """One keeper turn. Returns (narrative, Control)."""
@@ -358,7 +370,7 @@ class Keeper:
         msgs = build_messages(state, self.campaign, self.system, user_input, nudge)
         system_prompt = build_system_prompt(self.campaign, self.system, state.language,
                                              state.god_mode, state=state)
-        raw = self.llm.chat(msgs, system_prompt=system_prompt)
+        raw = check_llm(self.llm.chat(msgs, system_prompt=system_prompt))
         narrative, ctrl = parse_response(raw)
         if ctrl == Control.empty() and "```" not in (raw or ""):
             self.parse_failures += 1

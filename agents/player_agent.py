@@ -9,6 +9,7 @@ All three persist on CharacterState, so they survive saves and never silently va
 import re
 
 from core import memory
+from core.llm_client import check_llm
 from core.keeper import build_state_block, language_block
 
 RECENT = 10
@@ -112,8 +113,8 @@ loyalties above, and let your history colour what you notice.
                else f"It is your moment to act, {char.name}.")
         msgs.append({"role": "user", "content": cue})
 
-        raw = self.llm.chat(msgs, system_prompt=self._system_prompt(char, state, mode),
-                            temperature=0.8, max_tokens=350)
+        raw = check_llm(self.llm.chat(msgs, system_prompt=self._system_prompt(char, state, mode),
+                                      temperature=0.8, max_tokens=350))
         thought, action = parse_agent_output(raw)
         if thought:
             char.private_thoughts.append(thought)

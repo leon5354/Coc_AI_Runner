@@ -1,4 +1,5 @@
 """UI-agnostic game engine: the turn loop, roll gate, effect application, saves."""
+import re
 from dataclasses import asdict
 from pathlib import Path
 
@@ -9,10 +10,29 @@ from core import campaign as campaign_mod
 from core import memory
 from core.game_state import CharacterState, GameState, slugify, unique_id
 from core.keeper import Keeper
-from core.llm_client import LLMClient
+from core.llm_client import LLMClient, check_llm
+from rules.base import parse_dice, validate_dice
 
 PROTAGONIST_YAML = Path(__file__).resolve().parent.parent / "data" / "agents" / "protagonist.yaml"
 MAX_KEEPER_CYCLES = 3  # bound on chained auto-rolls in one turn
+
+ITEM_PROMPT = """You describe one item from a tabletop horror game, as the character holding it
+would notice it. Two short sentences of concrete physical detail, plain text only. Never invent
+plot facts or clues. Use the language given in the request."""
+
+
+def _roll_mod(req: dict, *keys) -> int:
+    """Read a bonus/penalty count from a roll_request, tolerating LLM spellings. 0-2."""
+    for k in keys:
+        v = req.get(k)
+        if v is True:
+            return 1
+        try:
+            if v:
+                return max(0, min(2, abs(int(v))))
+        except (TypeError, ValueError):
+            pass
+    return 0
 
 
 def _character_from_sheet(name, sheet, controller="human", personality="", backstory="", player_label=""):
@@ -74,6 +94,7 @@ class Engine:
         self.keeper = Keeper(self.llm, self.campaign, self.system)
         self._researcher = None
         self._undo_snapshot = None
+        self.events = []               # dice to show the player; the UI drains these per beat
         self._repair_character_ids()   # fix pre-fix saves with colliding ids (e.g. non-ASCII names)
 
     def _repair_character_ids(self):
@@ -111,6 +132,22 @@ class Engine:
     def _take_snapshot(self):
         self._undo_snapshot = asdict(self.state)
 
+    def drain_events(self) -> list:
+        out, self.events = self.events, []
+        return out
+
+    def _record_roll(self, who, label, result, kind="skill"):
+        """Count a roll for the end screen and queue it for the dice table."""
+        s = self.state.stats
+        s["rolls"] = s.get("rolls", 0) + 1
+        if result.tier == "Critical Success":
+            s["crits"] = s.get("crits", 0) + 1
+        elif result.tier == "Fumble":
+            s["fumbles"] = s.get("fumbles", 0) + 1
+        self.events.append({"kind": kind, "who": who, "label": label, "roll": result.roll,
+                            "tier": result.tier, "success": result.success, "detail": result.detail,
+                            "dice": result.dice})
+
     # Turns run in two halves so a UI can redraw between beats (live play):
     #   begin_*()  — instant, records the player's move
     #   keeper_steps() — generator; each next() does ONE unit of work (a keeper reply,
@@ -140,10 +177,12 @@ class Engine:
             return None
         self._take_snapshot()
         char = self.state.get_character(pr["character_id"])
-        result = self.system.skill_check(pr["target"], pr.get("difficulty", "regular"))
+        result = self.system.skill_check(pr["target"], pr.get("difficulty", "regular"),
+                                         pr.get("bonus", 0), pr.get("penalty", 0))
         line = f"{char.name} — {pr['skill']}: {result.detail}"
         self.state.dice_log.append(line)
         self.state.pending_roll = None
+        self._record_roll(char.name, pr["skill"], result)
         self.state.messages.append({"role": "dice", "name": char.name, "content": line})
         self.state.save()
         return result
@@ -277,6 +316,91 @@ class Engine:
             lines += ["---", "## Dice log", ""] + [f"- {l}" for l in st.dice_log]
         return "\n".join(lines)
 
+    def roll_preview(self) -> dict:
+        """What the pending roll needs, for the dice table."""
+        pr = self.state.pending_roll
+        if not pr:
+            return None
+        return {"need": self.system.roll_preview(pr["target"], pr.get("difficulty", "regular")),
+                "chance": self.system.chance(pr["target"], pr.get("difficulty", "regular"),
+                                             pr.get("bonus", 0), pr.get("penalty", 0))}
+
+    def free_roll(self, expr: str):
+        """Player rolls loose dice ('2d6+1') from the tray. Logged, changes nothing else."""
+        m = re.fullmatch(r"\s*(\d*)d(\d+)\s*([+-]\s*\d+)?\s*", expr or "", re.I)
+        if not m or not validate_dice(expr):
+            return None
+        n, sides, mod = int(m[1] or 1), int(m[2]), int((m[3] or "0").replace(" ", ""))
+        if not (1 <= n <= 8 and sides in (4, 6, 8, 10, 12, 20, 100)):
+            return None
+        vals = [parse_dice(f"1d{sides}") for _ in range(n)]
+        total = sum(vals) + mod
+        line = f"Free roll {expr.strip()}: {vals} = {total}"
+        self.state.dice_log.append(line)
+        self.state.save()
+        dice = []
+        for v in vals:
+            if sides == 100:
+                dice += [{"die": "d100", "value": (v % 100) // 10 * 10, "kept": True},
+                         {"die": "d10", "value": v % 10, "kept": True}]
+            else:
+                dice.append({"die": f"d{sides}", "value": v, "kept": True})
+        event = {"kind": "free", "who": "", "label": expr.strip(), "roll": total, "tier": "",
+                 "success": True, "detail": line, "dice": dice}
+        return event
+
+    # --- inventory ---
+    def _find_item(self, char, name: str):
+        want = (name or "").strip().lower()
+        for it in char.inventory:
+            if it.lower() == want:
+                return it
+        for it in char.inventory:
+            if want and (want in it.lower() or it.lower() in want):
+                return it
+        return None
+
+    def give_item(self, from_id: str, to_id: str, item: str) -> bool:
+        a, b = self.state.get_character(from_id), self.state.get_character(to_id)
+        found = self._find_item(a, item) if a else None
+        if not (found and b):
+            return False
+        a.inventory.remove(found)
+        b.inventory.append(found)
+        if found in a.item_notes:
+            b.item_notes[found] = a.item_notes.pop(found)
+        self.state.dice_log.append(f"[item] {a.name} gives {found} to {b.name}")
+        self.state.save()
+        return True
+
+    def drop_item(self, char_id: str, item: str) -> bool:
+        ch = self.state.get_character(char_id)
+        found = self._find_item(ch, item) if ch else None
+        if not found:
+            return False
+        ch.inventory.remove(found)
+        ch.item_notes.pop(found, None)
+        self.state.dice_log.append(f"[item] {ch.name} drops {found}")
+        self.state.save()
+        return True
+
+    def inspect_item(self, char_id: str, item: str) -> str:
+        """Describe an item once (cheap model), remembered after that. Costs no turn."""
+        ch = self.state.get_character(char_id)
+        found = self._find_item(ch, item) if ch else None
+        if not found:
+            return ""
+        if found not in ch.item_notes:
+            lang = {"zh": "Traditional Chinese", "yue": "Cantonese written in Traditional Chinese",
+                    "en": "English"}.get(self.state.language, "the same language as the item's name")
+            note = check_llm(self.util_llm.chat(
+                [{"role": "user", "content": f"Setting: {self.campaign.title}. Holder: {ch.name}. "
+                                             f"Item: {found}. Language: {lang}."}],
+                system_prompt=ITEM_PROMPT, temperature=0.6, max_tokens=120))
+            ch.item_notes[found] = (note or "").strip()
+            self.state.save()
+        return ch.item_notes[found]
+
     def consult_researcher(self, query: str, use_web: bool = False) -> str:
         from agents.researcher import Researcher
         if self._researcher is None:
@@ -298,6 +422,8 @@ class Engine:
             self._apply_effects(ctrl)
             actors_requested.extend(ctrl.characters_act)
             self.state.save()
+            if self.state.ending:
+                return
 
             if ctrl.minigame and not ctrl.roll_request:
                 self.launch_minigame(ctrl.minigame)
@@ -307,6 +433,8 @@ class Engine:
                 break
             char, skill, target = self._resolve_roll_target(ctrl.roll_request)
             difficulty = ctrl.roll_request.get("difficulty", "regular")
+            bonus = _roll_mod(ctrl.roll_request, "bonus", "bonus_dice", "advantage")
+            penalty = _roll_mod(ctrl.roll_request, "penalty", "penalty_dice", "disadvantage")
             if char.controller == "human" and char.status == "active":
                 if self.state.rolls_since_action >= 2:
                     # chain guard: one player action shouldn't spiral into endless keeper rolls
@@ -319,15 +447,17 @@ class Engine:
                 self.state.pending_roll = {
                     "character_id": char.id, "skill": skill, "target": target,
                     "difficulty": difficulty, "reason": ctrl.roll_request.get("reason", ""),
+                    "bonus": bonus, "penalty": penalty,
                 }
                 self.state.save()
                 return  # gate: wait for the human to roll
 
             yield f"🎲 {char.name} rolls {skill}…"
-            result = self.system.skill_check(target, difficulty)
+            result = self.system.skill_check(target, difficulty, bonus, penalty)
             line = f"{char.name} — {skill}: {result.detail}"
             self.state.dice_log.append(line)
             self.state.messages.append({"role": "dice", "name": char.name, "content": line})
+            self._record_roll(char.name, skill, result)
             self.state.save()
             yield "The Keeper narrates the outcome…"
             input_text = "Narrate the outcome of the roll above."
@@ -366,6 +496,11 @@ class Engine:
                     lost = char.stress - new
                     char.stress = new
                     st.dice_log.append(f"{char.name} — {line}")
+                    roll = self.system.last_stress
+                    self.events.append({"kind": "stress", "who": char.name, "label": "Mind",
+                                        "roll": roll["roll"], "success": roll["passed"],
+                                        "tier": "Success" if roll["passed"] else "Failure",
+                                        "detail": line, "dice": roll["dice"]})
                     if new == 0:
                         char.status = "insane"
                         st.dice_log.append(f"{char.name} has lost their mind entirely.")
@@ -377,16 +512,41 @@ class Engine:
 
         if ctrl.hp_change:
             char = st.get_character(ctrl.hp_change.get("character", "")) or st.active_character()
+            raw = str(ctrl.hp_change.get("amount", 0)).replace(" ", "")
+            sign = -1 if raw.startswith("-") else 1
             try:
-                amount = int(ctrl.hp_change.get("amount", 0))
-            except (TypeError, ValueError):
+                amount = sign * parse_dice(raw.lstrip("+-"))   # "-1d6" rolled here, "-3" taken as is
+            except ValueError:
                 amount = 0
+                st.dice_log.append(f"[warn] keeper sent unreadable hp amount {raw!r} — ignored")
             if char and amount:
+                was_down = char.hp == 0
                 char.hp = max(0, min(char.max_hp, char.hp + amount))
                 st.dice_log.append(f"{char.name} HP {'+' if amount > 0 else ''}{amount} -> {char.hp}/{char.max_hp}")
                 if char.hp == 0 and char.status == "active":
                     char.status = "unconscious"
                     st.dice_log.append(f"{char.name} collapses.")
+                elif char.hp == 0 and was_down and amount < 0 and char.status == "unconscious":
+                    char.status = "dead"
+                    st.dice_log.append(f"{char.name} dies.")
+                elif char.hp > 0 and char.status == "unconscious":
+                    char.status = "active"
+                    st.dice_log.append(f"{char.name} comes to.")
+
+        if ctrl.inventory_change:
+            ic = ctrl.inventory_change
+            char = st.get_character(ic.get("character", "")) or st.active_character()
+            if char:
+                for it in ic.get("add") or []:
+                    name = it.get("name") if isinstance(it, dict) else it
+                    if name and str(name) not in char.inventory:
+                        char.inventory.append(str(name))
+                        st.dice_log.append(f"[item] {char.name} gains {name}")
+                for it in ic.get("remove") or []:
+                    found = self._find_item(char, str(it))
+                    if found:
+                        char.inventory.remove(found)
+                        st.dice_log.append(f"[item] {char.name} loses {found}")
 
         if ctrl.scene_transition:
             scene = self.campaign.scene(st.scene_id) or {}
@@ -402,6 +562,10 @@ class Engine:
                     st.visited_scenes.append(ctrl.scene_transition)
             else:
                 st.dice_log.append(f"[warn] keeper referenced unknown scene {ctrl.scene_transition!r} — ignored")
+
+        if ctrl.ending and not st.ending:
+            known = {e.get("outcome"): e.get("description", "") for e in self.campaign.endings}
+            st.ending = {"outcome": ctrl.ending, "description": known.get(ctrl.ending, "")}
 
     def _companion_turns_steps(self, requested_ids):
         st = self.state
@@ -434,6 +598,6 @@ class Engine:
         yield from self._keeper_cycle_steps(wrap, allow_companions=False)
 
     def _finish_turn(self):
-        if not self.state.pending_roll and not self.state.pending_minigame:
+        if not self.state.pending_roll and not self.state.pending_minigame and not self.state.ending:
             memory.maybe_compact(self.state, self.util_llm)
         self.state.save()
