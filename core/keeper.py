@@ -379,6 +379,14 @@ player-facing text in the same language as the story."""
 # what a device can't work without; everything else has a sensible default
 DEVICE_NEEDS = {"hidden_text", "ciphertext", "solution", "code", "sequence", "wires", "correct", "message"}
 
+BOOK_PROMPT = """You keep the books of a tabletop game. Read the narration and report only what
+clearly, physically happened in it. Answer with JSON only:
+{"hurt": "<character id, or null>", "damage": "<1d3, 1d6 or 2d6, or null>", "healed": "<character id, or null>",
+ "who": "<character id who gained or lost an item, or null>", "gain": "<item, or null>", "lose": "<item, or null>"}
+Threats, fear, near misses and things that only might happen are not damage. Minor harm is 1d3, a
+real wound 1d6, a terrible one 2d6. gain: something picked up or handed over and kept. lose:
+something used up, broken, dropped or taken away."""
+
 # History holds the narration without its json, so weaker models copy that and drop the block.
 LOCAL_REMINDER = "\n\n(Keep this reply under 130 words, or 220 Chinese characters. End it with the ```json control block.)"
 
@@ -445,6 +453,31 @@ class Keeper:
         if not isinstance(data, dict) or not all(data.get(k) for k in DEVICE_NEEDS & set(sample)):
             return None
         return {**data, "type": game}
+
+    def bookkeep(self, state, narrative: str, ctrl, llm=None):
+        """Models describe wounds and finds without updating the sheet. Ask plainly what changed."""
+        if not narrative or ctrl.roll_request or (ctrl.hp_change and ctrl.inventory_change):
+            return
+        people = "; ".join(f"id={c.id} {c.name}, carrying: {', '.join(c.inventory) or 'nothing'}" for c in state.characters)
+        try:
+            data = json.loads((llm or self.llm).get_completion(
+                f"Characters: {people}\nNarration: {narrative[:1500]}", system_prompt=BOOK_PROMPT,
+                temperature=0.1, max_tokens=120, json_mode=True))
+        except (TypeError, ValueError):
+            return
+        if not isinstance(data, dict):
+            return
+        ids = {c.id for c in state.characters}
+        real = lambda v: v if isinstance(v, str) and v.strip() and v.strip().lower() not in ("null", "none") else None
+        if not ctrl.hp_change:
+            if data.get("hurt") in ids and real(data.get("damage")) in ("1d3", "1d6", "2d6"):
+                ctrl.hp_change = {"character": data["hurt"], "amount": f"-{data['damage']}", "reason": ""}
+            elif data.get("healed") in ids:
+                ctrl.hp_change = {"character": data["healed"], "amount": "+1d3", "reason": ""}
+        gain, lose = real(data.get("gain")), real(data.get("lose"))
+        if not ctrl.inventory_change and (gain or lose):
+            who = data.get("who") if data.get("who") in ids else state.active_character_id
+            ctrl.inventory_change = {"character": who, "add": [gain] if gain else [], "remove": [lose] if lose else []}
 
     def respond_steps(self, state, user_input: str, rule: bool = False):
         """One keeper turn, as a generator: yields Partial text, returns (narrative, Control).

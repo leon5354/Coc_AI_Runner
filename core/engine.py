@@ -500,6 +500,8 @@ class Engine:
         for _ in range(MAX_KEEPER_CYCLES):
             rule, self._player_acted = self._player_acted, False
             narrative, ctrl = yield from self.keeper.respond_steps(self.state, input_text, rule=rule)
+            if self.keeper.local:
+                self.keeper.bookkeep(self.state, narrative, ctrl, self.util_llm)
             if narrative:
                 self.state.messages.append({"role": "keeper", "content": narrative})
             self._apply_effects(ctrl)

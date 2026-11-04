@@ -269,6 +269,40 @@ e.set_llm(LocalModel("not json at all", "It's quiet."))
 e.submit_action(hero.id, "I wait.")
 assert st.messages[-1]["content"] == "It's quiet.", "a broken referee never stops the turn"
 
+# the bookkeeper turns what the story says into sheet changes, and invents nothing
+class BookModel(LocalModel):
+    def __init__(self, book, *replies):
+        super().__init__('{"roll": null}', *replies)
+        self.book = book
+
+    def get_completion(self, prompt, **k):
+        return self.book if prompt.startswith("Characters:") else self.ruling
+
+
+e, st, hero = fresh()
+book = '{"hurt": "%s", "damage": "1d6", "who": null, "gain": "Silver coin", "lose": "torch"}' % st.characters[0].id
+e.set_llm(BookModel(book, "A claw rakes your arm. You grab a silver coin as your torch falls into the dark."))
+hp = hero.hp
+e.submit_action(hero.id, "I reach into the hole.")
+assert hp - 6 <= hero.hp < hp and "Silver coin" in hero.inventory and not any("torch" in i.lower() for i in hero.inventory)
+
+e, st, hero = fresh()
+e.set_llm(BookModel('{"hurt": "nobody", "damage": "1d6", "gain": "null", "lose": null}', "It nearly hits you."))
+hp, n = hero.hp, len(hero.inventory)
+e.submit_action(hero.id, "I duck.")
+assert hero.hp == hp and len(hero.inventory) == n, "bad ids and null words change nothing"
+
+e, st, hero = fresh()
+e.set_llm(BookModel('{"hurt": "%s", "damage": "9d9"}' % st.characters[0].id, "Ouch."))
+hp = hero.hp
+e.submit_action(hero.id, "I stumble.")
+assert hero.hp == hp, "only sane damage sizes are accepted"
+
+e, st, hero = fresh()
+e.set_llm(BookModel("broken", "All quiet."))
+e.submit_action(hero.id, "I wait.")
+assert st.messages[-1]["content"] == "All quiet."
+
 # in the last scene the referee can end the story; elsewhere an ending ruling is ignored
 last = [s for s in camp.scenes if not s.get("exits")]
 e, st, hero = fresh()
