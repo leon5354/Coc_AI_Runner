@@ -40,6 +40,7 @@ they never spend a turn, roll dice, or change scene/plot state.
 |---|---|---|
 | `core/engine.py` | UI-agnostic orchestrator | **Live turns**: `begin_action/begin_negotiate/begin_minigame_result` (instant) + `keeper_steps()` generator — each `next()` = ONE beat (keeper reply, one companion, one auto-roll), yields the next beat's label. Blocking wrappers `submit_action/resolve_roll/negotiate_roll/resolve_minigame` drain it (CLI/tests). Also `roll_dice`, `undo`, `update_character`, `set_llm(main, util)`, `begin_talk/talk_steps` (converse, no turn), `ask_keeper_ooc` (out-of-character Q&A, changes nothing), `_repair_character_ids()` (fixes pre-fix saves with colliding ids) |
 | `core/keeper.py` | Prompt assembly + parsing | `Control` dataclass; `MINIGAME_TYPES` (derived from `minigames_catalog`); hybrid prose+json contract; `LANGUAGE_BLOCKS` (auto/en/zh/yue); `GOD_MODE_BLOCK`; `character_authority_clause(state)` builds the dynamic "who may I voice" rule (humans always protected; AI companions protected too in `companion_style="player"` + non-solo party — Keeper must use `characters_act` instead of inventing their lines; Keeper may voice them as NPCs only in solo mode or `companion_style="cinematic"`) |
+| Local-model helpers | Referee and bookkeeper | In `core/keeper.py`, Ollama only. `referee()` asks before the story: roll, move, puzzle, ending. `device()` fills a puzzle's contents. `bookkeep()` asks after the story: HP and items. All JSON mode, all ignored if the answer is unusable. Stronger models do this themselves through the control block |
 | `core/game_state.py` | All runtime state | `GameState`/`CharacterState` dataclasses; JSON save per campaign; `pending_roll`/`pending_minigame` survive reload; `CharacterState.memory_summary`/`relationships`/`private_thoughts` (per-character memory); `GameState.companion_style` (player/cinematic); `slugify()` keeps unicode, `unique_id()` guarantees no id collisions |
 | `core/campaign.py` | Schema v2 load + validate | `validate()` returns ALL problems; optional fields: `tone`, `npcs`, `escalation`, `canon`, scene `keeper_notes`/`mood`; `Campaign.protagonist` property (setting-appropriate player character, falls back to `data/agents/protagonist.yaml` when absent) |
 | `core/memory.py` | Rolling summary + character memory | story summary: compact >30 msgs, per-character arc lines, hard facts live in state block not summary; `compact_character()`: folds an AI character's overflowing `private_thoughts` into first-person `memory_summary` + `relationships`, using the cheap `util_llm` |
@@ -80,9 +81,11 @@ they never spend a turn, roll dice, or change scene/plot state.
 7. **Dice events**: every roll the player should see goes through `engine.events`
    (`_record_roll`, stress checks) and is drained per beat by the server. `RollResult.dice` lists
    the physical dice; kept dice must add back up to the roll. `test_mechanics.py` enforces it.
-8. **Clues**: a successful roll with a scene clue's skill finds that clue (`_outcome_prompt`). The
+8. **Saves**: `GameState.slot` names each save. "" is the campaign's first; new games get a dated
+   slot. `saves_of()` lists them, `save_path_of()` finds one.
+9. **Clues**: a successful roll with a scene clue's skill finds that clue (`_outcome_prompt`). The
    Keeper can also award clues through `clues_discovered`.
-9. **Protagonist**: `Campaign.protagonist` ⟷ `scripter.ARCHITECT_INSTRUCTION_TEMPLATE`'s
+10. **Protagonist**: `Campaign.protagonist` ⟷ `scripter.ARCHITECT_INSTRUCTION_TEMPLATE`'s
    `protagonist` block ⟷ `engine.new_game()`'s fallback to `data/agents/protagonist.yaml`. A
    campaign without a protagonist block must still produce a playable (generic) character.
 

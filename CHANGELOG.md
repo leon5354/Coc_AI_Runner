@@ -24,6 +24,10 @@
 - **Push and Luck** for Call of Cthulhu.
 - **Chinese interface**, following the game's language or set in Settings.
 - **A D&D sample campaign**, The Drowned Bell.
+- **Character creator** and **several saves per campaign**.
+- **Bookkeeper for local models**: what the story says about wounds and items reaches the sheet.
+- **Sound that fits the scene**: rain, wind, fire crackle, from a button in the top bar.
+- **NPC portraits**, a People list in the journal, and a recap when you resume a game.
 - **Keeper tools**: items, endings, bonus/penalty dice, damage as dice ("-1d6").
 - **`test_mechanics.py`, `test_all.py`, `playtest.py`, GOAL.md**.
 ### Fixed
@@ -33,6 +37,8 @@
 - AI failures were written into the story as narration.
 - Ollama cut off the Keeper's prompt (context 4096) and thinking models returned empty text.
 - A success now finds the scene's real clue, so models can't skip the campaign's clues.
+### Fixed
+- Ambient sound stopped when Settings closed.
 ### Removed
 - The Streamlit UI. The web app replaced all of it.
 ### Changed

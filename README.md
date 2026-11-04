@@ -88,6 +88,9 @@ Adding a system is one file in `rules/` implementing the `RuleSystem` interface 
   generated in the browser; drop audio files into `data/audio/` for your own music.
 
 **Everyday usability**
+- **Character creator** — make the campaign's hero your own, moving skill points around.
+- **Several saves** — keep more than one run of a campaign, side by side on the title screen.
+- **Two languages** — the interface follows the game's language, or pick it in Settings.
 - **In-app model switcher** — sidebar LLM settings; a cheap "utility model" tier for background
   tasks (memory compaction, lore fetch) keeps token spend down without dumbing down the Keeper.
 - **Undo & export** — rewind the last turn (one step); download the session transcript as
