@@ -406,6 +406,7 @@ def start(body: StartIn):
                 state = new_game(path, hero=body.hero)
                 if save_exists(path) or saves_of(path):
                     state.slot = datetime.now().strftime("%m%d-%H%M%S")
+                state.save()
             else:
                 state = GameState.load(save) if save else new_game(path, hero=body.hero)
             main, util = make_llms()

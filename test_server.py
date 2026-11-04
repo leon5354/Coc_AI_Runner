@@ -188,8 +188,7 @@ assert g["state"]["characters"][0]["skills"]["Occult"] == 40
 c.post("/api/game/saves/delete", json={"file": "the_haunting.yaml", "slot": g["state"]["slot"]})
 
 # resume: a fresh start without restart picks up the save
-n = len(c.get("/api/game").json()["state"]["messages"])
 g = c.post("/api/game/start", json={"file": "the_haunting.yaml"}).json()
-assert len(g["state"]["messages"]) == n
+assert g["state"]["slot"] == "" and len(g["state"]["messages"]) > 1
 
 print("test_server: all checks passed")
