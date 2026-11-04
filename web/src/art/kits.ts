@@ -1,6 +1,6 @@
 // Scene art, drawn entirely in code: a kit is a little painter that lays out silhouette layers
 // on a 1600x900 stage. Same seed, same picture; a new scene gets its own variation.
-export type Layer = { d: string; depth: number; tone: number; blur?: number; light?: number; hole?: boolean }
+export type Layer = { d: string; depth: number; tone: number; blur?: number; light?: number; hole?: boolean; color?: string }
 export type Glow = { x: number; y: number; r: number; flicker?: boolean; color?: string; o?: number }
 export type Art = { layers: Layer[]; glows: Glow[]; fx: string; moon?: [number, number]; outdoors: boolean }
 
@@ -484,7 +484,7 @@ function tavern(r: Rng): Art {
       { d: rect(150, 330, 460, 10) + rect(150, 440, 460, 10), depth: 0.06, tone: 0.55 },
       { d: bottles, depth: 0.06, tone: 0.62 },
       { d: rect(960, 250, 380, 520) + rect(930, 230, 440, 34), depth: 0.08, tone: 0.62 },
-      { d: arch(1030, 480, 240, 290), depth: 0.08, tone: 0, light: 0.95 },
+      { d: arch(1030, 480, 240, 290), depth: 0.08, tone: 0, light: 0.95, color: "#ff8a3a" },
       { d: `M1090 770l40-90l26 60l24-100l34 130z`, depth: 0.08, tone: 0.95 },
       { d: rect(0, 770, W, 130), depth: 0.1, tone: 0.55 },
       { d: floorboards(770), depth: 0.1, tone: 0.65 },

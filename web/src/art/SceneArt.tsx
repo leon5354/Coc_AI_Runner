@@ -186,7 +186,7 @@ export function SceneArt({ name, text, art: forced, mood, weather = true, story 
         </defs>
         {art.layers.filter((l) => l.d).map((l, i) => (
           <g key={i} className="art-layer" style={{ "--d": l.depth } as React.CSSProperties}>
-            <path d={l.d} fill={l.light !== undefined && l.light > 0 ? pal.light : mix(pal.far, pal.near, l.tone)}
+            <path d={l.d} fill={l.light !== undefined && l.light > 0 ? (l.color ?? pal.light) : mix(pal.far, pal.near, l.tone)}
               fillOpacity={l.light !== undefined ? l.light : 1}
               fillRule={l.hole ? "evenodd" : "nonzero"} filter={l.blur ? `url(#b${l.blur})` : undefined} />
           </g>
