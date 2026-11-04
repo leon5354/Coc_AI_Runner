@@ -217,3 +217,9 @@ sequencing confirmed in-browser: Keeper reply on screen while the companion was 
   dice "hang" there. It's the pane, not the app. Test with the pane visible, or use `instant`.
 - Streamlit removed; keeping it alive would have blocked engine changes.
 
+**Local-model helpers (2026-11-04):** playtests showed a 14 GB local model narrating everything and
+using almost no mechanics. Asking one plain JSON question at a time fixed it: `referee()` before the
+story (rolls went from 0-1 to about 1 per turn), `device()` for puzzles, `bookkeep()` after the story
+(damage went from almost never to happening). The same model is reliable at a small job and poor at
+doing a job while writing prose. Still open: drift. It wanders between scenes instead of finishing.
+
