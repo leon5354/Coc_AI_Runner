@@ -10,7 +10,8 @@
 - `test_server.py`: a full mock session over HTTP, offline.
 - **3D dice**: real physics, grab and flick. d4 to d100, bonus dice shown, companion and sanity
   rolls shown too, loose dice tray. The server's number always lands face up.
-- **Art made by code**: 16 kinds of place with sky, fog, parallax, weather and light. Portraits.
+- **Art made by code**: 26 kinds of place with sky, fog, parallax, random props, and weather and
+  light that follow the story. Portraits.
   No image files and no image AI.
 - **Character panel (狀態欄 / 物品欄)**: status, skills, inventory with icons, journal with clues
   and a map that fills in. Items can be inspected, used, given and dropped.
@@ -18,6 +19,11 @@
 - **No-key brains**: Ollama with add/remove from Hugging Face links, Claude plan through the
   `claude` command, OpenRouter sign-in. The choice is remembered.
 - **Live typing**: the Keeper's words appear as they are written.
+- **Referee for local models**: before each story beat, a small rules question decides rolls,
+  scene moves and puzzles, so smaller models can't skip the game.
+- **Push and Luck** for Call of Cthulhu.
+- **Chinese interface**, following the game's language or set in Settings.
+- **A D&D sample campaign**, The Drowned Bell.
 - **Keeper tools**: items, endings, bonus/penalty dice, damage as dice ("-1d6").
 - **`test_mechanics.py`, `test_all.py`, `playtest.py`, GOAL.md**.
 ### Fixed

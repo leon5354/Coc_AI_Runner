@@ -82,9 +82,10 @@ Adding a system is one file in `rules/` implementing the `RuleSystem` interface 
   pages), optionally seeded by a web search.
 - **Language selector** — force English, 繁體中文, or 廣東話 (narration in 書面語, dialogue in
   spoken Cantonese) regardless of what you type; or auto-detect.
-- **Atmosphere** — the background shifts with each scene's mood, a red vignette closes in as
-  sanity/resolve frays, and browser-synthesized ambience (drone, heartbeat, dice clatter) plays
-  with one click. Drop audio files into `data/audio/` for your own background music.
+- **Atmosphere** — every scene gets art drawn by code, matched to the place and mood: 26 kinds of
+  place, with sky, fog, parallax, random props, and weather that follows the story (a storm in the
+  narration brings rain and lightning). A red vignette closes in as sanity frays. Ambient sound is
+  generated in the browser; drop audio files into `data/audio/` for your own music.
 
 **Everyday usability**
 - **In-app model switcher** — sidebar LLM settings; a cheap "utility model" tier for background

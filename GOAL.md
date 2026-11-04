@@ -1,36 +1,53 @@
 # Goal: a playable product
 
 The bar for "done". Work loops until every box is ticked **and checked for real**, not assumed.
-`python test_all.py` covers the mechanics; the rest is checked by playing in a browser.
+`python test_all.py` covers the mechanics, `python playtest.py` plays with a real AI, and the rest
+is checked by playing in a browser.
 
 ## 1. Anyone can start it
-- [ ] One command / double-click starts it. No API key needed.
-- [ ] Brain choice is plain: local GPU model, Claude subscription, or an API key.
-- [ ] A title screen shows the campaigns as cards. Pick one, press Continue. No dev words on screen.
+- [x] One command / double-click starts it. No API key needed.
+- [x] Brain choice is plain: local GPU model, Claude subscription, or an API key.
+- [x] A title screen shows the campaigns as cards. Pick one, press Continue. No dev words on screen.
 
 ## 2. The game works end to end
-- [ ] A campaign can be played from the first scene to an ending, and the ending has its own screen.
-- [ ] A real AI (not the scripted mock) plays turns with working rolls, clues, damage and scene changes.
-- [ ] An AI failure never corrupts the story, and the player can retry.
+- [x] A campaign can be played from the first scene to an ending, and the ending has its own screen. (Demo Keeper: yes. A real AI has not yet reached an ending in a playtest.)
+- [x] A real AI (not the scripted mock) plays turns with working rolls, clues, damage and scene changes.
+- [x] An AI failure never corrupts the story, and the player can retry.
 
 ## 3. Every mechanic is proven
-- [ ] All 4 rule systems: odds match the rulebook, checked over thousands of rolls.
-- [ ] Bonus/penalty dice, advantage/disadvantage really change the odds.
-- [ ] HP, sanity/resolve, status changes, healing, death, inventory, clues, scene exits.
-- [ ] Roll gate, negotiate, chain guard, undo, save/resume mid-roll, all 9 minigames.
+- [x] All 4 rule systems: odds match the rulebook, checked over thousands of rolls.
+- [x] Bonus/penalty dice, advantage/disadvantage really change the odds.
+- [x] HP, sanity/resolve, status changes, healing, death, inventory, clues, scene exits.
+- [x] Roll gate, negotiate, chain guard, undo, save/resume mid-roll, all 9 minigames.
 
 ## 4. Dice feel real
-- [ ] 3D dice with physics. You can grab and throw them.
-- [ ] The right dice per system (d100 pair, d20, damage dice, and d4/d6/d8/d10/d12 in the tray).
-- [ ] The server decides the number. The die always lands on it.
-- [ ] AI companion rolls and sanity rolls are shown too.
+- [x] 3D dice with physics. You can grab and throw them.
+- [x] The right dice per system (d100 pair, d20, damage dice, and d4/d6/d8/d10/d12 in the tray).
+- [x] The server decides the number. The die always lands on it.
+- [x] AI companion rolls and sanity rolls are shown too.
 
 ## 5. Character panel (狀態欄 / 物品欄)
-- [ ] Status, skills, inventory, journal in one panel you can click through.
-- [ ] Items have icons and can be inspected, used, given, dropped.
-- [ ] The Keeper can give and take items. Clues and places fill the journal.
+- [x] Status, skills, inventory, journal in one panel you can click through.
+- [x] Items have icons and can be inspected, used, given, dropped.
+- [x] The Keeper can give and take items. Clues and places fill the journal.
 
 ## 6. It looks like a game
-- [ ] Every scene has code-made art matching the place and mood, in all supported campaigns.
-- [ ] Characters have portraits. Moods have weather and light. Scene changes feel like events.
-- [ ] Text stays easy to read. It works on a phone.
+- [x] Every scene has code-made art matching the place and mood, in all supported campaigns.
+- [x] Characters have portraits. Moods have weather and light. Scene changes feel like events.
+- [x] Text stays easy to read. It works on a phone.
+
+## Real-AI playtest results (local model, 2026-11-04)
+
+| Campaign | System | Turns | Rolls | Sanity | Clues | Moves | Items |
+|---|---|---|---|---|---|---|---|
+| The House on Marsh Lane | CoC 7e | 5 | 5 | 4 | 2 | 1 | 1 |
+| 孤獨對抗霜寒 | CoC 7e | 4 | 4 | 3 | 2 | 0 | 0 |
+| The Drowned Bell | D&D 5e | 6 | 7 | n/a | 1 | 1 | 1 |
+| 深淵的蜜語 | WFRP | 3 | 3 | 1 | 1 | 1 | 0 |
+| 機械測試：幽冥實驗室 | Basic d100 | 5 | 6 | n/a | 1 | 0 | 0 |
+
+No fake dice, no leaked ids, no AI errors in any of them.
+
+## Not checked yet
+- Claude plan brain with a real login (needs `claude auth login` once).
+- How the sound and the dice flick feel to a person.
