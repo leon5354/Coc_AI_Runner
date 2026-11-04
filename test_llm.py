@@ -80,7 +80,7 @@ with mock.patch("core.llm_client.requests.post", return_value=Resp()), \
         mock.patch("core.keeper.build_messages", return_value=[{"role": "user", "content": "x"}]), \
         mock.patch("core.keeper.build_system_prompt", return_value="S"):
     k = Keeper(o, camp, None)
-    gen = k.respond_steps(SimpleNamespace(language="auto", god_mode=False, scene_id=""), "go")
+    gen = k.respond_steps(SimpleNamespace(language="auto", god_mode=False, scene_id="", turn_count=0, stats={}), "go")
     shown = []
     try:
         while True:
