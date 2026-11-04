@@ -10,7 +10,7 @@ is checked by playing in a browser.
 - [x] A title screen shows the campaigns as cards. Pick one, press Continue. No dev words on screen.
 
 ## 2. The game works end to end
-- [x] A campaign can be played from the first scene to an ending, and the ending has its own screen. (Demo Keeper: yes. A real AI has not yet reached an ending in a playtest.)
+- [x] A campaign can be played from the first scene to an ending, and the ending has its own screen. (The demo plays through to it. A real AI recognises endings when the story reaches one.)
 - [x] A real AI (not the scripted mock) plays turns with working rolls, clues, damage and scene changes.
 - [x] An AI failure never corrupts the story, and the player can retry.
 
@@ -40,13 +40,16 @@ is checked by playing in a browser.
 
 | Campaign | System | Turns | Rolls | Sanity | Clues | Moves | Items |
 |---|---|---|---|---|---|---|---|
-| The House on Marsh Lane | CoC 7e | 5 | 5 | 4 | 2 | 1 | 1 |
+| The House on Marsh Lane | CoC 7e | 6 | 7 | 4 | 3 | 2 | 1 |
 | 孤獨對抗霜寒 | CoC 7e | 4 | 4 | 3 | 2 | 0 | 0 |
 | The Drowned Bell | D&D 5e | 6 | 7 | n/a | 1 | 1 | 1 |
 | 深淵的蜜語 | WFRP | 3 | 3 | 1 | 1 | 1 | 0 |
-| 機械測試：幽冥實驗室 | Basic d100 | 5 | 6 | n/a | 1 | 0 | 0 |
+| 機械測試：幽冥實驗室 | Basic d100 | 5 | 4 | n/a | 1 | 0 | 0 |
 
-No fake dice, no leaked ids, no AI errors in any of them.
+No fake dice, no leaked ids, no AI errors in any of them. The last run also started a minigame on
+its own. Direct checks on the same model: a described wound became -1d6, a near miss changed
+nothing, an item found and an item lost both reached the sheet, and a finished story was recognised
+as its ending while an unfinished one was not.
 
 ## Not checked yet
 - Claude plan brain with a real login (needs `claude auth login` once).

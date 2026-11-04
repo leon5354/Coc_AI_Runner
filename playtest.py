@@ -34,6 +34,7 @@ def main():
     ap.add_argument("--provider", default="ollama")
     ap.add_argument("--model", required=True)
     ap.add_argument("--language", default="auto", choices=list(LANGUAGE_LABELS))
+    ap.add_argument("--aim", default="", help="what the stand-in player is trying to do")
     ap.add_argument("--scene", default="", help="start in this scene id, e.g. the last one to test endings")
     a = ap.parse_args()
 
@@ -81,6 +82,7 @@ def main():
         recent = "\n".join(f"{m.get('name') or m['role']}: {m['content'][:400]}" for m in state.messages[-4:])
         prompt = [{"role": "user", "content": f"Story so far:\n{recent}\n\nYou carry: {', '.join(hero.inventory)}.\nWhat do you do?"}]
         action = llm.chat(prompt, system_prompt=PLAYER.format(name=hero.name, about=hero.personality)
+                          + (f"\nYour aim: {a.aim}" if a.aim else "")
                           + "\n" + language_block(state.language), temperature=0.9, max_tokens=120)
         if action.startswith("[SYSTEM ERROR]"):
             seen["errors"] += 1

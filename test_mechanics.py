@@ -270,6 +270,7 @@ e.submit_action(hero.id, "I wait.")
 assert st.messages[-1]["content"] == "It's quiet.", "a broken referee never stops the turn"
 
 # the bookkeeper turns what the story says into sheet changes, and invents nothing
+last = [s for s in camp.scenes if not s.get("exits")] or camp.scenes[-1:]
 class BookModel(LocalModel):
     def __init__(self, book, *replies):
         super().__init__('{"roll": null}', *replies)
@@ -297,6 +298,18 @@ e.set_llm(BookModel('{"hurt": "%s", "damage": "9d9"}' % st.characters[0].id, "Ou
 hp = hero.hp
 e.submit_action(hero.id, "I stumble.")
 assert hero.hp == hp, "only sane damage sizes are accepted"
+
+if last:      # the bookkeeper also notices when the last scene's narration ends the story
+    e, st, hero = fresh()
+    st.scene_id = last[0]["id"]
+    e.set_llm(BookModel('{"ending": "destroyed"}', "The coffin burns. It is over."))
+    e.submit_action(hero.id, "I light it.")
+    assert st.ending and st.ending["outcome"] == "destroyed"
+
+e, st, hero = fresh()
+e.set_llm(BookModel('{"ending": "destroyed"}', "Not yet."))
+e.submit_action(hero.id, "I wait.")
+assert st.ending is None, "no ending in a scene that still has exits"
 
 e, st, hero = fresh()
 e.set_llm(BookModel("broken", "All quiet."))

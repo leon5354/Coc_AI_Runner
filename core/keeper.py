@@ -459,9 +459,14 @@ class Keeper:
         if not narrative or ctrl.roll_request or (ctrl.hp_change and ctrl.inventory_change):
             return
         people = "; ".join(f"id={c.id} {c.name}, carrying: {', '.join(c.inventory) or 'nothing'}" for c in state.characters)
+        scene = self.campaign.scene(state.scene_id) or {}
+        final = self.campaign.endings and (not scene.get("exits") or scene is self.campaign.scenes[-1])
+        ends = "; ".join(f"{e.get('outcome')}: {e.get('description')}" for e in self.campaign.endings) if final else ""
+        extra = (f"\nPossible endings: {ends}\nAlso answer \"ending\": the outcome name, only if this narration "
+                 "shows that ending has actually happened and the story is over. Otherwise null.") if final else ""
         try:
             data = json.loads((llm or self.llm).get_completion(
-                f"Characters: {people}\nNarration: {narrative[:1500]}", system_prompt=BOOK_PROMPT,
+                f"Characters: {people}\nNarration: {narrative[:1500]}{extra}", system_prompt=BOOK_PROMPT,
                 temperature=0.1, max_tokens=120, json_mode=True))
         except (TypeError, ValueError):
             return
@@ -474,6 +479,8 @@ class Keeper:
                 ctrl.hp_change = {"character": data["hurt"], "amount": f"-{data['damage']}", "reason": ""}
             elif data.get("healed") in ids:
                 ctrl.hp_change = {"character": data["healed"], "amount": "+1d3", "reason": ""}
+        if final and not ctrl.ending and data.get("ending") in {e.get("outcome") for e in self.campaign.endings}:
+            ctrl.ending = data["ending"]
         gain, lose = real(data.get("gain")), real(data.get("lose"))
         if not ctrl.inventory_change and (gain or lose):
             who = data.get("who") if data.get("who") in ids else state.active_character_id
