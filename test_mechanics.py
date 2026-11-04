@@ -269,6 +269,20 @@ e.set_llm(LocalModel("not json at all", "It's quiet."))
 e.submit_action(hero.id, "I wait.")
 assert st.messages[-1]["content"] == "It's quiet.", "a broken referee never stops the turn"
 
+# in the last scene the referee can end the story; elsewhere an ending ruling is ignored
+last = [s for s in camp.scenes if not s.get("exits")]
+e, st, hero = fresh()
+e.set_llm(LocalModel('{"roll": null, "ending": "fled"}', "They left it behind."))
+e.submit_action(hero.id, "We leave town.")
+assert st.ending is None, "no ending while the story still has exits"
+
+if last:
+    e, st, hero = fresh()
+    st.scene_id = last[0]["id"]
+    e.set_llm(LocalModel('{"roll": "Dodge", "ending": "destroyed"}', "Fire takes the coffin."))
+    e.submit_action(hero.id, "I burn the coffin.")
+    assert st.ending and st.ending["outcome"] == "destroyed" and st.pending_roll is None
+
 # the referee can start a puzzle; its contents are asked for separately, once per scene
 class PuzzleModel(LocalModel):
     def get_completion(self, prompt, **k):

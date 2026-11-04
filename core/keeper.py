@@ -361,7 +361,7 @@ def parse_response(text: str):
 REFEREE_PROMPT = """You are the rules referee of a tabletop game. You never tell the story.
 Read what the player just did and answer with JSON only:
 {"roll": "<skill from the list, or null>", "difficulty": "<level>", "bonus": 0, "penalty": 0,
- "move_to": "<exit id, or null>", "device": "<puzzle device, or null>"}
+ "move_to": "<exit id, or null>", "device": "<puzzle device, or null>", "ending": "<outcome, or null>"}
 Call a roll whenever the outcome is uncertain and failing would matter: searching for something
 hidden, fighting, sneaking, persuading or lying, resisting, forcing, climbing, reading something
 dangerous. No roll for plain talk or a safe, simple action.
@@ -369,7 +369,8 @@ Use bonus 1 for a clear advantage and penalty 1 for a clear disadvantage. Otherw
 Set move_to only when the player clearly goes to that place now.
 Set device only when this moment clearly is one of the puzzle devices, or the keeper notes ask for
 it now: for example a coded text, a keypad or dial, blank paper near heat. Usually null. A device
-replaces the roll, so leave roll null when you set it."""
+replaces the roll, so leave roll null when you set it.
+Set ending only if endings are listed and the player's action truly decides how the story ends."""
 
 DEVICE_PROMPT = """You prepare one puzzle for a tabletop game. Answer with JSON only, using the same
 keys as the example, with new content that fits this story and scene. Keep it short. Write the
@@ -418,6 +419,8 @@ class Keeper:
                   f"Exits: {'; '.join(exits) or 'none'}\n"
                   f"Puzzle devices: {', '.join(minigames_catalog.for_setting(minigames_catalog.resolve_setting(self.campaign)))}\n"
                   f"Keeper notes: {str(scene.get('keeper_notes', '')).strip()[:300]}")
+        if not scene.get("exits"):        # the last scene: the story can end here
+            prompt += "\nEndings: " + "; ".join(f"{e.get('outcome')} ({e.get('description')})" for e in self.campaign.endings)
         try:
             data = json.loads(self.llm.get_completion(prompt, system_prompt=REFEREE_PROMPT, temperature=0.1,
                                                       max_tokens=120, json_mode=True))
@@ -459,6 +462,10 @@ class Keeper:
             puzzle = self.device(state, game, user_input)
         if puzzle:
             roll = move = None
+        ending = (ruling or {}).get("ending")
+        ending = ending if ending in {e.get("outcome") for e in self.campaign.endings} and not exits else None
+        if ending:
+            roll = move = puzzle = None
         nudge = self.parse_failures >= 2
         msgs = build_messages(state, self.campaign, self.system, user_input, nudge)
         if self.local:
@@ -467,6 +474,9 @@ class Keeper:
                                         "of tension, then STOP. Do not say how it turns out.)")
             elif move:
                 msgs[-1]["content"] += f"\n\n(The party now moves to: {(self.campaign.scene(move) or {}).get('name')}. Describe arriving there.)"
+            elif ending:
+                told = next(e for e in self.campaign.endings if e.get("outcome") == ending)
+                msgs[-1]["content"] += f"\n\n(The story ends now: {told.get('description')} Write the closing scene.)"
             elif puzzle:
                 msgs[-1]["content"] += ("\n\n(A puzzle is about to start. Lead up to it in 1-3 sentences and STOP. "
                                         "Do not solve it, and do not give the answer.)")
@@ -488,6 +498,8 @@ class Keeper:
                                  "bonus": ruling.get("bonus"), "penalty": ruling.get("penalty")}
         if move and not ctrl.scene_transition:
             ctrl.scene_transition = move
+        if ending:
+            ctrl.ending, ctrl.roll_request, ctrl.minigame = ending, None, None
         if puzzle:
             ctrl.minigame, ctrl.roll_request = ctrl.minigame or puzzle, None
             state.stats["device_scene"] = state.scene_id

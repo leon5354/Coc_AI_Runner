@@ -34,10 +34,14 @@ def main():
     ap.add_argument("--provider", default="ollama")
     ap.add_argument("--model", required=True)
     ap.add_argument("--language", default="auto", choices=list(LANGUAGE_LABELS))
+    ap.add_argument("--scene", default="", help="start in this scene id, e.g. the last one to test endings")
     a = ap.parse_args()
 
     state = new_game(a.campaign)
     state.language = a.language
+    if a.scene:
+        state.scene_id = a.scene
+        state.visited_scenes.append(a.scene)
     llm = LLMClient(provider=a.provider, model_name=a.model)
     e = Engine(state, llm=llm)
     camp_ids = {s["id"] for s in e.campaign.scenes} | e.campaign.all_clue_ids()
