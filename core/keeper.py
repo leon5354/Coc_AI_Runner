@@ -427,6 +427,10 @@ class Keeper:
                   f"Exits: {'; '.join(exits) or 'none'}\n"
                   f"Puzzle devices: {', '.join(minigames_catalog.for_setting(minigames_catalog.resolve_setting(self.campaign)))}\n"
                   f"Keeper notes: {str(scene.get('keeper_notes', '')).strip()[:300]}")
+        stay = state.turn_count - state.stats.get("scene_since", 0)
+        if exits and stay >= 4:     # weaker models linger: lean on the story to move
+            prompt += (f"\nThe party has been here {stay} turns. If this action could lead onward at all, "
+                       "set move_to to the best exit and leave roll null.")
         if not scene.get("exits") or scene is self.campaign.scenes[-1]:   # the story can end here
             prompt += "\nEndings: " + "; ".join(f"{e.get('outcome')} ({e.get('description')})" for e in self.campaign.endings)
         try:
@@ -520,6 +524,8 @@ class Keeper:
             elif puzzle:
                 msgs[-1]["content"] += ("\n\n(A puzzle is about to start. Lead up to it in 1-3 sentences and STOP. "
                                         "Do not solve it, and do not give the answer.)")
+            if state.turn_count - state.stats.get("scene_since", 0) >= 6 and exits and not move:
+                msgs[-1]["content"] += "\n\n(This scene has gone on long enough. Show the party the way onward now.)"
             msgs[-1]["content"] += LOCAL_REMINDER
         system_prompt = build_system_prompt(self.campaign, self.system, state.language,
                                              state.god_mode, state=state)

@@ -633,6 +633,7 @@ class Engine:
                         char.inventory.remove(found)
                         st.dice_log.append(f"[item] {char.name} loses {found}")
 
+        before = st.scene_id
         if ctrl.scene_transition:
             scene = self.campaign.scene(st.scene_id) or {}
             valid = {x["to"] for x in scene.get("exits", [])}
@@ -647,6 +648,9 @@ class Engine:
                     st.visited_scenes.append(ctrl.scene_transition)
             else:
                 st.dice_log.append(f"[warn] keeper referenced unknown scene {ctrl.scene_transition!r} — ignored")
+
+        if st.scene_id != before:
+            st.stats["scene_since"] = st.turn_count     # pacing: how long the party has been here
 
         if ctrl.ending and not st.ending:
             known = {e.get("outcome"): e.get("description", "") for e in self.campaign.endings}

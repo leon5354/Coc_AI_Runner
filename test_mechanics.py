@@ -316,6 +316,23 @@ e.set_llm(BookModel("broken", "All quiet."))
 e.submit_action(hero.id, "I wait.")
 assert st.messages[-1]["content"] == "All quiet."
 
+# pacing: after a few turns in one scene the referee is told to move the story on
+llm = LocalModel('{"roll": null}', "Time passes.")
+e, st, hero = fresh()
+e.set_llm(llm)
+st.turn_count = 5
+e.submit_action(hero.id, "I keep looking.")
+assert any("has been here" in p for p in llm.prompts) and any("Show the party the way onward" in p for p in llm.prompts)
+llm = LocalModel('{"roll": null}', "Time passes.")
+e, st, hero = fresh()
+e.set_llm(llm)
+e.submit_action(hero.id, "I look.")
+assert not any("has been here" in p for p in llm.prompts), "no nudge in a fresh scene"
+e, st, hero = fresh(ctrl(scene_transition=camp.scene(camp.first_scene_id())["exits"][0]["to"]))
+st.turn_count = 9
+e.submit_action(hero.id, "We go.")
+assert st.stats["scene_since"] == 10, "the clock restarts in a new scene"
+
 # in the last scene the referee can end the story; elsewhere an ending ruling is ignored
 last = [s for s in camp.scenes if not s.get("exits")]
 e, st, hero = fresh()
