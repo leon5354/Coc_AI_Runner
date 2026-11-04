@@ -57,15 +57,16 @@ Field meanings (use null / [] when not applicable this turn):
 - clues_discovered: list of scripted clue ids the characters just uncovered.
 - scene_transition: the scripted scene id the party moves to (must be one of the listed exits), else null.
 - characters_act: ids of AI-controlled companions who should act next turn (only when their action matters).
-- minigame: an OPTIONAL dramatic device. Use SPARINGLY (at most once per scene), only when the fiction
-  naturally calls for it, and NEVER together with roll_request. One of:
+- minigame: a puzzle the player solves by hand. At most once per scene, NEVER together with roll_request.
+  When a character sets to work on a lock or dial, a coded text, wires or a ritual, that moment IS the
+  puzzle: start it now instead of narrating it or rolling for it. One of:
   {minigame_contract}
   After the minigame you will receive a MINIGAME RESULT message; continue the story from it.
 - ending: when the story truly concludes, the outcome name of the ending reached (from the
   campaign's possible endings). Write the closing narration in the same message. Otherwise null.
 
-Worked example:
-The floorboards groan as you kneel. Something glints between them — but the light is failing fast.
+Worked example, when a search needs a roll:
+<your story, stopped at the moment of tension>
 
 ```json
 {"roll_request": {"character": "player", "skill": "Spot Hidden", "difficulty": "regular", "reason": "searching the parlor floor"},
@@ -291,8 +292,9 @@ as a friendly game master at the table would.
 
 
 # where the control block starts, even if the model forgets the fence or changes the key order
-_HIDE_RE = re.compile(r'```|\{\s*"?[a-z_]*"?\s*:?\s*$|\{\s*"(?:' + "|".join(sorted(CONTROL_KEYS)) + r')"')
+_HIDE_RE = re.compile(r'```|(?m:^\s*===)|\{\s*"?[a-z_]*"?\s*:?\s*$|\{\s*"(?:' + "|".join(sorted(CONTROL_KEYS)) + r')"')
 _FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
+_NOT_STORY_RE = re.compile(r"roll_request|control block|\bd\d+\s*=\s*\d+", re.IGNORECASE)
 
 
 def _last_balanced_json(text: str):
@@ -317,6 +319,13 @@ def _last_balanced_json(text: str):
     return None, -1
 
 
+def clean_story(text: str) -> str:
+    """Drop what was never story: a copied dice result, the model talking about its own format, or
+    the hidden game state written out, which starts with === and takes the rest of the reply with it."""
+    text = re.split(r"^\s*===", text, maxsplit=1, flags=re.MULTILINE)[0]
+    return "\n".join(line for line in text.split("\n") if not _NOT_STORY_RE.search(line)).strip()
+
+
 def parse_response(text: str):
     """Returns (narrative, Control). Never raises — malformed control degrades to pure narration."""
     if not text:
@@ -336,7 +345,7 @@ def parse_response(text: str):
             narrative = text[:start].strip()
 
     narrative = narrative.replace("[ROLL_REQUIRED]", "").strip()
-    narrative = re.sub(r"\s*```\w*\s*$", "", narrative)   # a fence the model opened and never used
+    narrative = clean_story(re.sub(r"\s*```\w*\s*$", "", narrative))   # also a fence opened and never used
     if not isinstance(data, dict):
         return narrative, Control.empty()
 
@@ -359,18 +368,26 @@ def parse_response(text: str):
 
 
 REFEREE_PROMPT = """You are the rules referee of a tabletop game. You never tell the story.
-Read what the player just did and answer with JSON only:
-{"roll": "<skill from the list, or null>", "difficulty": "<level>", "bonus": 0, "penalty": 0,
- "move_to": "<exit id, or null>", "device": "<puzzle device, or null>", "ending": "<outcome, or null>"}
-Call a roll whenever the outcome is uncertain and failing would matter: searching for something
-hidden, fighting, sneaking, persuading or lying, resisting, forcing, climbing, reading something
-dangerous. No roll for plain talk or a safe, simple action.
+Read what the player just did and answer with JSON only. Most actions call for nothing, so most
+fields stay null. Decide "risky" first.
+risky is true only when the action could fail and failing would matter: searching for something
+hidden, fighting, sneaking, persuading or lying, resisting, forcing, climbing something dangerous,
+reading something dangerous.
+risky is false for picking something up, dropping or throwing something, plain talk, walking along
+a safe way, and looking at what is in plain view.
+If risky, set roll to the best skill from the list and pick a difficulty. Otherwise roll is null.
 Use bonus 1 for a clear advantage and penalty 1 for a clear disadvantage. Otherwise 0.
-Set move_to only when the player clearly goes to that place now.
-Set device only when this moment clearly is one of the puzzle devices, or the keeper notes ask for
-it now: for example a coded text, a keypad or dial, blank paper near heat. Usually null. A device
-replaces the roll, so leave roll null when you set it.
-Set ending only if endings are listed and the player's action truly decides how the story ends."""
+Set move_to to an exit id only when the player goes to that exact place in this action.
+Set device only when the player is working on one of the puzzle devices: a coded text, a keypad or
+dial, wires, blank paper near heat. Then risky is false.
+Set ending only if endings are listed and this action decides how the story ends. Then risky is false.
+
+Examples, in a room with the exit "cellar":
+I pocket the coin. -> {"risky": false, "roll": null, "difficulty": null, "bonus": 0, "penalty": 0, "move_to": null, "device": null, "ending": null}
+I ask the maid where she was. -> {"risky": false, "roll": null, "difficulty": null, "bonus": 0, "penalty": 0, "move_to": null, "device": null, "ending": null}
+I go down to the cellar. -> {"risky": false, "roll": null, "difficulty": null, "bonus": 0, "penalty": 0, "move_to": "cellar", "device": null, "ending": null}
+I go through the drawers for hidden letters. -> {"risky": true, "roll": "<best skill>", "difficulty": "<level>", "bonus": 0, "penalty": 0, "move_to": null, "device": null, "ending": null}
+I turn the dial on the wall safe. -> {"risky": false, "roll": null, "difficulty": null, "bonus": 0, "penalty": 0, "move_to": null, "device": "combination_lock", "ending": null}"""
 
 DEVICE_PROMPT = """You prepare one puzzle for a tabletop game. Answer with JSON only, using the same
 keys as the example, with new content that fits this story and scene. Keep it short. Write the
@@ -386,6 +403,10 @@ clearly, physically happened in it. Answer with JSON only:
 Threats, fear, near misses and things that only might happen are not damage. Minor harm is 1d3, a
 real wound 1d6, a terrible one 2d6. gain: something picked up or handed over and kept. lose:
 something used up, broken, dropped or taken away."""
+
+BOOK_SHOCK = ('\nAlso answer "shock": the id of a character who just saw something no sane mind should: a '
+              "monster, the dead walking, the impossible. Plain danger is not shock. Otherwise null.")
+SHOCK_LOSS = "1/1d6"
 
 # History holds the narration without its json, so weaker models copy that and drop the block.
 LOCAL_REMINDER = "\n\n(Keep this reply under 130 words, or 220 Chinese characters. End it with the ```json control block.)"
@@ -435,7 +456,7 @@ class Keeper:
             prompt += "\nEndings: " + "; ".join(f"{e.get('outcome')} ({e.get('description')})" for e in self.campaign.endings)
         try:
             data = json.loads(self.llm.get_completion(prompt, system_prompt=REFEREE_PROMPT, temperature=0.1,
-                                                      max_tokens=120, json_mode=True))
+                                                      max_tokens=160, json_mode=True))
         except (TypeError, ValueError):
             return None
         return data if isinstance(data, dict) else None
@@ -468,10 +489,11 @@ class Keeper:
         ends = "; ".join(f"{e.get('outcome')}: {e.get('description')}" for e in self.campaign.endings) if final else ""
         extra = (f"\nPossible endings: {ends}\nAlso answer \"ending\": the outcome name, only if this narration "
                  "shows that ending has actually happened and the story is over. Otherwise null.") if final else ""
+        shock = self.system.has_stress and not ctrl.stress_check and state.stats.get("shock_scene") != state.scene_id
         try:
             data = json.loads((llm or self.llm).get_completion(
-                f"Characters: {people}\nNarration: {narrative[:1500]}{extra}", system_prompt=BOOK_PROMPT,
-                temperature=0.1, max_tokens=120, json_mode=True))
+                f"Characters: {people}\nNarration: {narrative[:1500]}{extra}{BOOK_SHOCK if shock else ''}",
+                system_prompt=BOOK_PROMPT, temperature=0.1, max_tokens=160, json_mode=True))
         except (TypeError, ValueError):
             return
         if not isinstance(data, dict):
@@ -483,12 +505,27 @@ class Keeper:
                 ctrl.hp_change = {"character": data["hurt"], "amount": f"-{data['damage']}", "reason": ""}
             elif data.get("healed") in ids:
                 ctrl.hp_change = {"character": data["healed"], "amount": "+1d3", "reason": ""}
+        if shock and data.get("shock") in ids:      # one per scene: the same horror doesn't break you twice
+            ctrl.stress_check = {"character": data["shock"], "loss": SHOCK_LOSS}
+            state.stats["shock_scene"] = state.scene_id
         if final and not ctrl.ending and data.get("ending") in {e.get("outcome") for e in self.campaign.endings}:
             ctrl.ending = data["ending"]
-        gain, lose = real(data.get("gain")), real(data.get("lose"))
+        tidy = lambda v: real(v) and real(v).replace("_", " ")
+        gain, lose = tidy(data.get("gain")), tidy(data.get("lose"))
         if not ctrl.inventory_change and (gain or lose):
             who = data.get("who") if data.get("who") in ids else state.active_character_id
             ctrl.inventory_change = {"character": who, "add": [gain] if gain else [], "remove": [lose] if lose else []}
+
+    def _write(self, msgs, system_prompt):
+        """Generator: one reply from the model, shown as it arrives. Returns the raw text."""
+        if not hasattr(self.llm, "stream"):
+            return check_llm(self.llm.chat(msgs, system_prompt=system_prompt))
+        raw = ""
+        for piece in self.llm.stream(msgs, system_prompt=system_prompt):
+            raw += piece
+            shown = clean_story(_HIDE_RE.split(raw, 1)[0])
+            yield Partial(shown.replace("[ROLL_REQUIRED]", ""))
+        return raw
 
     def respond_steps(self, state, user_input: str, rule: bool = False):
         """One keeper turn, as a generator: yields Partial text, returns (narrative, Control).
@@ -496,20 +533,21 @@ class Keeper:
         ruling = self.referee(state, user_input) if rule and self.local else None
         roll = (ruling or {}).get("roll")
         roll = roll if isinstance(roll, str) and roll.lower() not in ("", "null", "none") else None
+        roll = None if (ruling or {}).get("risky") is False else roll
         move = (ruling or {}).get("move_to")
         exits = {x["to"] for x in (self.campaign.scene(state.scene_id) or {}).get("exits", [])}
-        move = move if move in exits and not roll else None
+        move = move if move in exits else None
+        ending = (ruling or {}).get("ending")
+        ending = ending if ending in {e.get("outcome") for e in self.campaign.endings} and (not exits or state.scene_id == self.campaign.scenes[-1]["id"]) else None
         game = (ruling or {}).get("device")
         fits = minigames_catalog.for_setting(minigames_catalog.resolve_setting(self.campaign))
         puzzle = None
-        if game in fits and state.stats.get("device_scene") != state.scene_id:   # one per scene at most
+        if not ending and game in fits and state.stats.get("device_scene") != state.scene_id:   # one per scene at most
             puzzle = self.device(state, game, user_input)
-        if puzzle:
+        if ending or puzzle:
             roll = move = None
-        ending = (ruling or {}).get("ending")
-        ending = ending if ending in {e.get("outcome") for e in self.campaign.endings} and (not exits or state.scene_id == self.campaign.scenes[-1]["id"]) else None
-        if ending:
-            roll = move = puzzle = None
+        if move:            # the story moving on matters more than one more check on the way
+            roll = None
         nudge = self.parse_failures >= 2
         msgs = build_messages(state, self.campaign, self.system, user_input, nudge)
         if self.local:
@@ -529,21 +567,25 @@ class Keeper:
             msgs[-1]["content"] += LOCAL_REMINDER
         system_prompt = build_system_prompt(self.campaign, self.system, state.language,
                                              state.god_mode, state=state)
-        if hasattr(self.llm, "stream"):
-            raw = ""
-            for piece in self.llm.stream(msgs, system_prompt=system_prompt):
-                raw += piece
-                shown = _HIDE_RE.split(raw, 1)[0]
-                yield Partial(shown.replace("[ROLL_REQUIRED]", ""))
-        else:
-            raw = check_llm(self.llm.chat(msgs, system_prompt=system_prompt))
+        raw = yield from self._write(msgs, system_prompt)
         narrative, ctrl = parse_response(raw)
+        if self.local and not narrative:     # it only wrote out its notes: one more try
+            raw = yield from self._write(msgs, system_prompt)
+            narrative, ctrl = parse_response(raw)
+        for i in self.campaign.all_clue_ids() | {s["id"] for s in self.campaign.scenes}:
+            narrative = narrative.replace(i, i.replace("_", " "))    # an id said out loud reads as words
+        if self.local and not roll and ctrl.roll_request and (ruling or not rule):
+            who = state.get_character(ctrl.roll_request.get("character", "")) or state.active_character()
+            if who and who.controller == "human":   # left alone, weaker models roll for everything
+                ctrl.roll_request = None
         if roll and not ctrl.roll_request:
             ctrl.roll_request = {"character": state.active_character_id, "skill": roll,
                                  "difficulty": ruling.get("difficulty"), "reason": "",
                                  "bonus": ruling.get("bonus"), "penalty": ruling.get("penalty")}
-        if move and not ctrl.scene_transition:
+        if move:
             ctrl.scene_transition = move
+        elif self.local and ctrl.scene_transition not in exits:      # weaker models skip ahead
+            ctrl.scene_transition = None
         if ending:
             ctrl.ending, ctrl.roll_request, ctrl.minigame = ending, None, None
         if puzzle:

@@ -120,6 +120,7 @@ class Engine:
         self.events = []               # dice to show the player; the UI drains these per beat
         self.outcome = OUTCOME         # what to ask the keeper after the last human roll
         self._player_acted = False     # the next keeper call answers a free action: get a ruling first
+        self.failed_skill = ""         # the dice just said no to this skill, so its clue stays hidden
         self._repair_character_ids()   # fix pre-fix saves with colliding ids (e.g. non-ASCII names)
 
     def _repair_character_ids(self):
@@ -163,8 +164,12 @@ class Engine:
 
     def _outcome_prompt(self, skill, result) -> str:
         """A success with a scene clue's skill finds that clue: the dice decide, not the model's memory."""
+        if not result.success:
+            self.failed_skill = skill.lower()
+            return f"{OUTCOME} The attempt failed, so it reveals no clue."
+        self.failed_skill = ""
         scene = self.campaign.scene(self.state.scene_id) or {}
-        for c in scene.get("clues", []) if result.success else []:
+        for c in scene.get("clues", []):
             if c["id"] not in self.state.discovered_clues and (c.get("skill") or "").lower() == skill.lower():
                 self.state.discovered_clues.append(c["id"])
                 return f"{OUTCOME} This success uncovers a clue. Reveal it in the story now: {str(c.get('reveals', '')).strip()}"
@@ -195,6 +200,7 @@ class Engine:
             self.state.active_character_id = character_id
         self.state.turn_count += 1
         self.state.rolls_since_action = 0
+        self.failed_skill = ""
         self.state.messages.append({"role": "player", "name": char.name if char else None, "content": text})
         self.state.save()
         self._player_acted = True
@@ -567,7 +573,9 @@ class Engine:
         st = self.state
         for cid in ctrl.clues_discovered:
             if cid in self.campaign.all_clue_ids() and cid not in st.discovered_clues:
-                st.discovered_clues.append(cid)
+                skill = (self.campaign.clue(cid).get("skill") or "").lower()
+                if not self.failed_skill or skill != self.failed_skill:
+                    st.discovered_clues.append(cid)
             elif cid not in self.campaign.all_clue_ids():
                 st.dice_log.append(f"[warn] keeper referenced unknown clue id {cid!r} — ignored")
 

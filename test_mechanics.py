@@ -269,6 +269,54 @@ e.set_llm(LocalModel("not json at all", "It's quiet."))
 e.submit_action(hero.id, "I wait.")
 assert st.messages[-1]["content"] == "It's quiet.", "a broken referee never stops the turn"
 
+e, st, hero = fresh()
+e.set_llm(LocalModel('{"risky": false, "roll": "Spot Hidden"}', "You pick it up."))
+e.submit_action(hero.id, "I pick it up.")
+assert st.pending_roll is None, "a safe action never rolls, whatever else the form says"
+
+e, st, hero = fresh()
+target = camp.scene(st.scene_id)["exits"][0]["to"]
+e.set_llm(LocalModel('{"risky": true, "roll": "Climb", "move_to": "%s"}' % target, "You go up."))
+e.submit_action(hero.id, "I go.")
+assert st.scene_id == target and st.pending_roll is None, "moving on beats a roll on the way"
+
+e, st, hero = fresh()
+e.set_llm(LocalModel('{"risky": false, "roll": null}', 'You look.\n```json\n{"roll_request": {"character": "%s", "skill": "Fighting"}}\n```' % hero.id))
+e.submit_action(hero.id, "I look.")
+assert st.pending_roll is None, "the referee calls the player's rolls on a local model"
+
+# a failed roll keeps its clue hidden, even if the model hands it over anyway
+e, st, hero = fresh()
+clue = next(c for s in camp.scenes for c in s.get("clues", []) if c.get("skill"))
+st.scene_id = next(s["id"] for s in camp.scenes if clue in s.get("clues", []))
+st.pending_roll = {"character_id": hero.id, "skill": clue["skill"], "target": 1, "difficulty": "regular"}
+real = e.system.skill_check
+e.system.skill_check = lambda *a, **k: next(r for r in iter(lambda: real(*a, **k), None) if not r.success)
+e.roll_dice()
+e.system.skill_check = real
+e.set_llm(Scripted('Nothing.\n```json\n{"clues_discovered": ["%s"]}\n```' % clue["id"]))
+for _ in e.keeper_steps(e.accept_failure()):
+    pass
+assert clue["id"] not in st.discovered_clues, "the dice said no"
+
+# lines that were never story don't reach the player
+from core.keeper import parse_response
+told, _ = parse_response('The rope holds.\nMarta: Marta - Climb: d100=75 vs skill 50\n(Note the "roll_request" field in the json control block.)\nYou climb.')
+assert told == "The rope holds.\nYou climb.", told
+told, _ = parse_response("The door shuts.\n=== GAME STATE (turn 2) ===\nKeeper notes: the secret.")
+assert told == "The door shuts.", told
+
+e, st, hero = fresh()
+e.set_llm(LocalModel('{"roll": null}', "=== GAME STATE ===\nKeeper notes: the secret.", "The wind drops."))
+e.submit_action(hero.id, "I wait.")
+assert st.messages[-1]["content"] == "The wind drops.", "hidden notes are never the story: it writes again"
+
+e, st, hero = fresh()
+place = next(s["id"] for s in camp.scenes if "_" in s["id"])
+e.set_llm(Scripted(f"You make for the {place}."))
+e.submit_action(hero.id, "I go.")
+assert st.messages[-1]["content"] == f"You make for the {place.replace('_', ' ')}.", "an id said out loud reads as words"
+
 # the bookkeeper turns what the story says into sheet changes, and invents nothing
 last = [s for s in camp.scenes if not s.get("exits")] or camp.scenes[-1:]
 class BookModel(LocalModel):
@@ -298,6 +346,16 @@ e.set_llm(BookModel('{"hurt": "%s", "damage": "9d9"}' % st.characters[0].id, "Ou
 hp = hero.hp
 e.submit_action(hero.id, "I stumble.")
 assert hero.hp == hp, "only sane damage sizes are accepted"
+
+e, st, hero = fresh()
+e.set_llm(BookModel('{"shock": "%s"}' % st.characters[0].id, "The dead man sits up and smiles."))
+mind = hero.stress
+e.submit_action(hero.id, "I look.")
+assert [x for x in e.drain_events() if x["kind"] == "stress"], "a horror asks for a shown Sanity roll"
+assert mind - 6 <= hero.stress <= mind
+was = hero.stress
+e.submit_action(hero.id, "I look again.")
+assert hero.stress == was and not [x for x in e.drain_events() if x["kind"] == "stress"], "the same scene shocks once"
 
 if last:      # the bookkeeper also notices when the last scene's narration ends the story
     e, st, hero = fresh()

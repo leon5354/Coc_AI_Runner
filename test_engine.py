@@ -40,7 +40,10 @@ assert reloaded.pending_roll == pr
 
 # turn 3: resolve -> clue discovered + stress check applied
 old_stress = state.characters[0].stress
+real = engine.system.skill_check
+engine.system.skill_check = lambda *a, **k: next(r for r in iter(lambda: real(*a, **k), None) if r.success)
 result = engine.resolve_roll()
+engine.system.skill_check = real
 assert result is not None and 1 <= result.roll <= 100
 assert state.pending_roll is None
 assert "tenant_letters" in state.discovered_clues
