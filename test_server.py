@@ -147,6 +147,20 @@ assert c.post("/api/game/ooc", json={"question": "hm"}).status_code == 502
 srv.ENGINE.keeper.llm = good
 assert c.post("/api/game/ooc", json={"question": "hm"}).status_code == 200    # lock was released
 
+# live typing: words arrive before the turn ends, and the control block never does
+class Typing:
+    def stream(self, *a, **k):
+        yield from ["The stair ", "creaks. ", "```json\n", '{"hp_change": null}', "\n```"]
+
+
+srv.ENGINE.keeper.llm = Typing()
+lines = turn("/api/game/act", {"character_id": pid, "text": "I climb."})
+typed = [l["partial"] for l in lines if "partial" in l]
+assert typed and typed[-1].strip() == "The stair creaks." and not any("hp_change" in t for t in typed)
+assert lines[-1]["game"]["state"]["messages"][-1]["content"] == "The stair creaks."
+c.post("/api/game/undo")
+srv.ENGINE.keeper.llm = good
+
 # resume: a fresh start without restart picks up the save
 n = len(c.get("/api/game").json()["state"]["messages"])
 g = c.post("/api/game/start", json={"file": "the_haunting.yaml"}).json()
