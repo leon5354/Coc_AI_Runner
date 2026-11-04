@@ -86,7 +86,7 @@ class RuleSystem(ABC):
 
     def roll_preview(self, skill_value: int, difficulty: str) -> str:
         """Short 'what you need' line shown before a roll."""
-        return f"d100 under {skill_value}"
+        return f"d100 ≤ {skill_value}"
 
     def chance(self, skill_value: int, difficulty: str, bonus: int = 0, penalty: int = 0) -> int:
         """Success chance in percent."""

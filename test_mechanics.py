@@ -117,9 +117,9 @@ for s in (coc, wfrp):
 assert dnd.stress_check(50, "1/5") is None and basic.stress_check(50, "1/5") is None
 
 # --- chance + preview shown on the dice table ---
-assert coc.roll_preview(60, "hard") == "d100 under 30" and coc.roll_preview(60, "extreme") == "d100 under 12"
+assert coc.roll_preview(60, "hard") == "d100 ≤ 30" and coc.roll_preview(60, "extreme") == "d100 ≤ 12"
 assert dnd.roll_preview(3, "hard") == "d20 +3 vs DC 20"
-assert wfrp.roll_preview(40, "average") == "d100 under 60"
+assert wfrp.roll_preview(40, "average") == "d100 ≤ 60"
 assert abs(coc.chance(50, "hard") - 25) <= 4 and abs(dnd.chance(3, "medium") - 45) <= 4
 
 

@@ -67,7 +67,7 @@ class WFRP(RuleSystem):
 - The Old World is dangerous and unfair — reward cunning, punish recklessness."""
 
     def roll_preview(self, skill_value: int, difficulty: str) -> str:
-        return f"d100 under {max(1, skill_value + DIFF_MOD.get(difficulty, 20))}"
+        return f"d100 ≤ {max(1, skill_value + DIFF_MOD.get(difficulty, 20))}"
 
     def character_sheet_defaults(self) -> dict:
         return {

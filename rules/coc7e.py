@@ -94,7 +94,7 @@ class CoC7e(RuleSystem):
         return {"hard": skill_value // 2, "extreme": skill_value // 5}.get(difficulty, skill_value)
 
     def roll_preview(self, skill_value: int, difficulty: str) -> str:
-        return f"d100 under {self.need(skill_value, difficulty)}"
+        return f"d100 ≤ {self.need(skill_value, difficulty)}"
 
     def character_sheet_defaults(self) -> dict:
         return {
