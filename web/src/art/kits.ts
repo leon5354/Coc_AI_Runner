@@ -469,9 +469,248 @@ function hills(r: Rng): Art {
   }
 }
 
+function tavern(r: Rng): Art {
+  let bottles = ""
+  for (let i = 0; i < 22; i++) {
+    const x = 180 + i * 17 + r() * 6, y = 330 + (i % 2) * 110, h = 34 + r() * 24
+    bottles += rect(x, y - h, 11, h) + rect(x + 3, y - h - 12, 5, 12)
+  }
+  let stools = ""
+  for (const x of [240, 400, 560]) stools += rect(x, 640, 70, 14) + rect(x + 8, 654, 10, 150) + rect(x + 52, 654, 10, 150)
+  return {
+    outdoors: false, fx: "embers",
+    layers: [
+      { d: full, depth: 0.03, tone: 0.3 },
+      { d: rect(150, 330, 460, 10) + rect(150, 440, 460, 10), depth: 0.06, tone: 0.55 },
+      { d: bottles, depth: 0.06, tone: 0.62 },
+      { d: rect(960, 250, 380, 520) + rect(930, 230, 440, 34), depth: 0.08, tone: 0.62 },
+      { d: arch(1030, 480, 240, 290), depth: 0.08, tone: 0, light: 0.95 },
+      { d: `M1090 770l40-90l26 60l24-100l34 130z`, depth: 0.08, tone: 0.95 },
+      { d: rect(0, 770, W, 130), depth: 0.1, tone: 0.55 },
+      { d: floorboards(770), depth: 0.1, tone: 0.65 },
+      { d: rect(120, 540, 620, 30) + rect(140, 570, 580, 220), depth: 0.14, tone: 0.82 },
+      { d: stools, depth: 0.2, tone: 0.95 },
+      { d: rect(820, 0, 4, 170) + poly(790, 170, 854, 170, 842, 220, 802, 220), depth: 0.2, tone: 0.9 },
+    ],
+    glows: [{ x: 1150, y: 640, r: 620, flicker: true, o: 1, color: "#ff9a4a" }, { x: 822, y: 220, r: 420, flicker: true, o: 0.8, color: "#ffc27a" }, { x: 380, y: 400, r: 320, o: 0.35, color: "#ffc27a" }],
+  }
+}
+
+function ship(r: Rng): Art {
+  let rails = ""
+  for (let i = 0; i < 16; i++) rails += rect(i * 110, 700, 12, 130)
+  return {
+    outdoors: true, fx: "fog", moon: [420, 210],
+    layers: [
+      { d: ridge(r, 560, 26, 40), depth: 0.03, tone: 0.34 },
+      { d: ridge(r, 610, 30, 50), depth: 0.05, tone: 0.5 },
+      { d: rect(1000, 40, 26, 700) + rect(830, 120, 370, 12), depth: 0.14, tone: 0.86 },
+      { d: `M846 134Q1010 330 846 520L1186 520Q1090 330 1186 134z`, depth: 0.14, tone: 0.7 },
+      { d: poly(1010, 44, 1016, 40, 1570, 700, 1558, 704) + poly(1008, 44, 1014, 48, 572, 704, 556, 700), depth: 0.14, tone: 0.92 },
+      { d: rect(0, 690, W, 16) + rails, depth: 0.2, tone: 0.95 },
+      { d: rect(0, 800, W, 100), depth: 0.2, tone: 1 },
+    ],
+    glows: [{ x: 420, y: 540, r: 300, o: 0.3 }],
+  }
+}
+
+function mine(r: Rng): Art {
+  const layers: Layer[] = [{ d: full, depth: 0.02, tone: 0.2 }]
+  for (const [w, h, tone] of [[300, 260, 0.36], [520, 430, 0.5], [800, 620, 0.68], [1240, 860, 0.9]] as const) {
+    const x = 800 - w / 2, y = 760 - h, t = w * 0.05
+    layers.push({ d: full + poly(x + 30, y + 30, x + w - 30, y + 30, x + w, 900, x, 900), depth: 0.04 + tone * 0.16, tone: tone * 0.8, hole: true },
+      { d: rect(x, y, t, h + 140) + rect(x + w - t, y, t, h + 140) + poly(x - 20, y, x + w + 20, y, x + w + 20, y + t, x - 20, y + t), depth: 0.04 + tone * 0.16, tone })
+  }
+  let ties = ""
+  for (let i = 0; i < 7; i++) {
+    const t = i / 7, y = 640 + t * t * 260, w = 80 + t * 420
+    ties += rect(800 - w, y, w * 2, 6 + t * 12)
+  }
+  layers.push({ d: ties + poly(760, 620, 776, 620, 500, 900, 440, 900) + poly(824, 620, 840, 620, 1160, 900, 1100, 900), depth: 0.2, tone: 0.92 },
+    { d: rect(1020 + r() * 10, 330, 8, 60), depth: 0.18, tone: 0.9 })
+  return { layers, outdoors: false, fx: "dust", glows: [{ x: 1024, y: 400, r: 460, flicker: true, o: 1, color: "#ffb070" }, { x: 800, y: 560, r: 340, o: 0.6 }, { x: 560, y: 420, r: 260, flicker: true, o: 0.6, color: "#ffb070" }] }
+}
+
+function castle(): Art {
+  let far = "", near = ""
+  for (const [x, w, y] of [[620, 34, 300], [946, 34, 300], [520, 50, 240], [1030, 50, 240]] as const) far += rect(x, y, w, 790 - y)
+  for (const x of [150, 1370]) near += rect(x, 40, 90, 860)
+  let banners = ""
+  for (const x of [330, 1200]) banners += `M${x} 110h90v300l-45 -46l-45 46z`
+  return {
+    outdoors: false, fx: "embers",
+    layers: [
+      { d: full + gothic(690, 150, 220, 330), depth: 0.03, tone: 0.3, hole: true },
+      { d: poly(560, 790, 1040, 790, 1500, 900, 100, 900), depth: 0.08, tone: 0.5 },
+      { d: poly(740, 790, 860, 790, 1010, 900, 590, 900), depth: 0.08, tone: 0, light: 0.14 },
+      { d: far, depth: 0.08, tone: 0.56 },
+      { d: `M740 790V620Q740 590 770 590V520Q800 490 830 520V590Q860 590 860 620V790z`, depth: 0.1, tone: 0.82 },
+      { d: banners, depth: 0.16, tone: 0.74 },
+      { d: near + rect(0, 0, W, 44), depth: 0.3, tone: 1 },
+    ],
+    glows: [{ x: 800, y: 300, r: 340, o: 0.55 }, { x: 300, y: 520, r: 200, flicker: true, o: 0.5, color: "#ffa050" }, { x: 1300, y: 520, r: 200, flicker: true, o: 0.5, color: "#ffa050" }],
+  }
+}
+
+function desert(r: Rng): Art {
+  const dune = (y: number, a: number) => `M0 900V${f(y)}C400 ${f(y - a)} 700 ${f(y + a)} 1000 ${f(y - a * 0.3)}S1400 ${f(y + a * 0.5)} 1600 ${f(y - a * 0.4)}V900z`
+  let columns = ""
+  for (const [x, h] of [[980, 300], [1090, 230], [1200, 340], [1320, 160]] as const) columns += rect(x, 680 - h, 56, h) + rect(x - 8, 680 - h, 72, 16)
+  return {
+    outdoors: true, fx: "dust", moon: [340, 190],
+    layers: [
+      { d: dune(560, 40), depth: 0.03, tone: 0.2 },
+      { d: columns + rect(960, 330, 310, 30), depth: 0.07, tone: 0.5 },
+      { d: dune(650 + r() * 20, 50), depth: 0.09, tone: 0.46 },
+      { d: dune(770, 60), depth: 0.16, tone: 0.76 },
+      { d: poly(160, 900, 200, 690, 250, 660, 300, 720, 360, 900), depth: 0.3, tone: 1, blur: 2 },
+    ],
+    glows: [{ x: 340, y: 560, r: 340, o: 0.3 }],
+  }
+}
+
+function train(r: Rng): Art {
+  let wins = "", seats = "", racks = ""
+  for (let i = 0; i < 4; i++) {
+    const x = 90 + i * 380
+    wins += rect(x, 230, 280, 230)
+    seats += `M${x - 20} 900V620Q${x - 20} 590 ${x + 10} 590H${x + 70}Q${x + 100} 590 ${x + 100} 620V760H${x + 250}V900z`
+    racks += rect(x - 30, 170, 340, 10)
+  }
+  return {
+    outdoors: true, fx: "rain", moon: [860, 330],
+    layers: [
+      { d: full + wins, depth: 0.04, tone: 0.42, hole: true },
+      { d: rect(0, 0, W, 130) + rect(0, 760, W, 140), depth: 0.05, tone: 0.56 },
+      { d: racks, depth: 0.08, tone: 0.8 },
+      { d: seats, depth: 0.16, tone: 0.92 },
+      { d: rect(r() * 4 + 780, 60, 40, 24), depth: 0.06, tone: 0, light: 0.8 },
+    ],
+    glows: [{ x: 800, y: 80, r: 460, flicker: true, o: 0.45 }],
+  }
+}
+
+function shore(r: Rng): Art {
+  return {
+    outdoors: true, fx: "fog", moon: [360, 180],
+    layers: [
+      { d: ridge(r, 590, 18, 40), depth: 0.03, tone: 0.34 },
+      { d: ridge(r, 640, 22, 50), depth: 0.05, tone: 0.5 },
+      { d: `M1100 900L1130 700L1240 640L1420 690L1600 620V900z`, depth: 0.1, tone: 0.78 },
+      { d: poly(1250, 660, 1270, 300, 1340, 300, 1362, 660) + rect(1250, 270, 112, 30) + poly(1262, 270, 1306, 214, 1350, 270), depth: 0.1, tone: 0.84 },
+      { d: rect(1278, 232, 56, 38), depth: 0.1, tone: 0, light: 0.95 },
+      { d: `M0 900V780Q240 730 520 800T1000 840T1400 900z`, depth: 0.22, tone: 1 },
+    ],
+    glows: [{ x: 1306, y: 250, r: 300, flicker: true, o: 0.8 }, { x: 360, y: 640, r: 280, o: 0.3 }],
+  }
+}
+
+function deadTree(r: Rng, x: number, base: number, h: number) {
+  let d = poly(x - 14, base, x - 5, base - h, x + 5, base - h, x + 16, base)
+  for (let i = 0; i < 6; i++) {
+    const y = base - h * (0.4 + r() * 0.58), s = i % 2 ? 1 : -1, l = h * (0.16 + r() * 0.24), k = 0.3 + r() * 0.5
+    d += poly(x, y - 3, x, y + 4, x + s * l, y - l * k)                                   // a branch, thin at the tip
+    d += poly(x + s * l * 0.5, y - l * k * 0.5, x + s * l * 0.56, y - l * k * 0.4,        // and a twig off it
+              x + s * l * 0.8, y - l * k * 1.5)
+  }
+  return d
+}
+
+function swamp(r: Rng): Art {
+  return {
+    outdoors: true, fx: "spores", moon: [1100, 180],
+    layers: [
+      { d: ridge(r, 560, 30), depth: 0.03, tone: 0.24 },
+      { d: deadTree(r, 300, 660, 250) + deadTree(r, 980, 650, 200) + deadTree(r, 1260, 650, 280), depth: 0.08, tone: 0.5 },
+      { d: rect(0, 650, W, 250), depth: 0.1, tone: 0.42 },
+      { d: rect(0, 680, W, 4) + rect(200, 720, 420, 3) + rect(880, 760, 520, 3), depth: 0.1, tone: 0, light: 0.14 },
+      { d: deadTree(r, 620, 830, 460) + `M0 900V800Q160 760 320 820T640 860V900z M1100 900Q1300 790 1600 780V900z`, depth: 0.22, tone: 0.96 },
+    ],
+    glows: [{ x: 820, y: 690, r: 200, flicker: true, o: 0.5 }, { x: 460, y: 720, r: 120, flicker: true, o: 0.45 }],
+  }
+}
+
+function graveyard(r: Rng): Art {
+  let stones = "", far = "", fence = rect(0, 610, W, 7)
+  for (let i = 0; i < 12; i++) far += arch(40 + i * 134 + r() * 40, 590 + r() * 26, 44, 90)
+  for (let i = 0; i < 7; i++) stones += arch(60 + i * 226 + r() * 60, 680 + r() * 50, 90, 200)
+  stones += rect(778, 540, 22, 200) + rect(738, 590, 102, 20)
+  for (let i = 0; i < 30; i++) fence += poly(i * 56, 680, i * 56 + 6, 590, i * 56 + 12, 680)
+  return {
+    outdoors: true, fx: "fog", moon: [1180, 170],
+    layers: [
+      { d: ridge(r, 540, 40), depth: 0.03, tone: 0.24 },
+      { d: fence, depth: 0.06, tone: 0.5 },
+      { d: far, depth: 0.08, tone: 0.56 },
+      { d: ridge(r, 720, 16), depth: 0.1, tone: 0.66 },
+      { d: stones, depth: 0.16, tone: 0.86 },
+      { d: deadTree(r, 1460, 920, 760), depth: 0.3, tone: 1, blur: 2 },
+    ],
+    glows: [],
+  }
+}
+
+function mansion(r: Rng): Art {
+  let lit = ""
+  for (const [x, y] of [[640, 410], [950, 410], [790, 540]] as const) if (r() > 0.25) lit += rect(x, y, 44, 76)
+  return {
+    outdoors: true, fx: "fog", moon: [330, 170],
+    layers: [
+      { d: ridge(r, 620, 40), depth: 0.03, tone: 0.24 },
+      { d: deadTree(r, 240, 720, 340) + deadTree(r, 1390, 720, 390), depth: 0.06, tone: 0.5 },
+      { d: `M500 720V360L560 250L620 360H980L1040 250L1100 360V720z M700 360L800 190L900 360z` + rect(1000, 190, 44, 90), depth: 0.1, tone: 0.8 },
+      { d: lit, depth: 0.1, tone: 0, light: 0.8 },
+      { d: arch(760, 590, 80, 130), depth: 0.1, tone: 1 },
+      { d: `M0 900V730Q400 690 800 720T1600 700V900z`, depth: 0.16, tone: 0.92 },
+    ],
+    glows: lit ? [{ x: 800, y: 480, r: 260, flicker: true, o: 0.4, color: "#ffc27a" }] : [],
+  }
+}
+
+// a little of the unexpected, so two rooms of the same kind differ
+function props(r: Rng, outdoors: boolean): Layer | null {
+  if (r() < 0.3) return null
+  const x = r() < 0.5 ? 40 + r() * 240 : 1320 + r() * 220
+  const y = 900
+  const pick = Math.floor(r() * 4)
+  const indoor = [
+    rect(x, y - 150, 170, 150) + rect(x + 30, y - 240, 110, 90),                           // crates
+    `M${f(x)} ${y}V${y - 140}Q${f(x)} ${y - 200} ${f(x + 60)} ${y - 200}Q${f(x + 120)} ${y - 200} ${f(x + 120)} ${y - 140}V${y}z`,   // barrel
+    rect(x, y - 110, 130, 14) + rect(x + 8, y - 96, 12, 96) + rect(x + 110, y - 96, 12, 96) + rect(x + 110, y - 230, 12, 130),       // chair
+    rect(x, y - 70, 170, 70) + rect(x + 14, y - 120, 140, 50) + rect(x + 34, y - 160, 90, 40),   // heaped books or boxes
+  ]
+  const outside = [
+    `M${f(x)} ${y}Q${f(x + 30)} ${y - 150} ${f(x + 120)} ${y - 160}Q${f(x + 240)} ${y - 120} ${f(x + 250)} ${y}z`,   // boulder
+    deadTree(r, x + 80, y + 20, 420),
+    rect(x, y - 150, 16, 150) + rect(x + 120, y - 130, 16, 130) + poly(x - 20, y - 120, x + 160, y - 96, x + 160, y - 84, x - 20, y - 108),  // broken fence
+    pine(r, x + 80, y + 40, 520),
+  ]
+  return { d: (outdoors ? outside : indoor)[pick], depth: 0.36, tone: 1, blur: 3 }
+}
+
+/** Weather and light the words ask for, in either language. */
+export function readSky(text: string) {
+  return {
+    weather: /blizzard|snow|雪/i.test(text) ? "snow" : /rain|storm|downpour|雨|暴風/i.test(text) ? "rain"
+      : /\bfog\b|mist|霧/i.test(text) ? "fog" : /smoke|ember|\bash\b|灰燼|濃煙|火星/i.test(text) ? "embers" : "",
+    lightning: /lightning|thunder|雷|閃電/i.test(text),
+    dark: /lights? (go|goes|went) out|pitch[- ]black|plunged into darkness|燈.{0,3}(滅|熄)|一片漆黑|陷入黑暗/i.test(text),
+  }
+}
+
 // --- choosing a kit from the scene's own words ---
 
 const KITS: Record<string, { words: RegExp; paint: (r: Rng, text: string) => Art }> = {
+  train: { words: /\btrain\b|carriage|subway|railway|火車|車廂|地鐵|列車/i, paint: train },
+  tavern: { words: /tavern|\binn\b|\bbar\b|pub\b|酒館|酒吧|酒舖|客棧/i, paint: tavern },
+  ship: { words: /\bship\b|\bdeck\b|\bboat\b|vessel|甲板|船/i, paint: ship },
+  mine: { words: /\bmine\b|mineshaft|tunnel|cave\b|caves\b|礦|隧道|洞穴|山洞/i, paint: mine },
+  castle: { words: /castle|throne|keep\b|palace|fortress|城堡|王座|宮殿|要塞/i, paint: castle },
+  desert: { words: /desert|dune|oasis|sands?\b|沙漠|沙丘|綠洲/i, paint: desert },
+  shore: { words: /lighthouse|\bshore\b|beach|coast|cliff|燈塔|海邊|海灘|海岸|懸崖/i, paint: shore },
+  swamp: { words: /swamp|marsh\b|bog\b|fen\b|沼澤|泥沼/i, paint: swamp },
+  graveyard: { words: /graveyard|cemetery|grave\b|tombstone|墓園|墳場|墓地/i, paint: graveyard },
+  mansion: { words: /outside the (house|manor)|mansion gate|front gate|estate|莊園|別墅|大宅外/i, paint: mansion },
   elevator: { words: /elevator|lift|電梯|升降機|𨋢/i, paint: elevator },
   abyss: { words: /abyss|void|pit|深淵|虛空|最終/i, paint: abyss },
   living: { words: /living room|television|sofa|couch|客廳|電視|螢幕|沙發|screen/i, paint: livingroom },
@@ -503,5 +742,10 @@ export function chooseKit(name: string, text: string, art?: string) {
 export function paintScene(name: string, text: string, art?: string): Art {
   const kit = chooseKit(name, text, art)
   const r = rng(hash(name + text))
-  return kit ? KITS[kit].paint(r, name + text) : hills(r)
+  const picture = kit ? KITS[kit].paint(r, name + text) : hills(r)
+  const extra = props(r, picture.outdoors)
+  if (extra) picture.layers.push(extra)
+  const sky = readSky(`${name} ${text}`)
+  if (sky.weather) picture.fx = sky.weather
+  return picture
 }

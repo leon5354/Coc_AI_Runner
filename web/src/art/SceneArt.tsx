@@ -1,7 +1,7 @@
 // The living backdrop: GPU-drawn sky and fog behind code-drawn silhouettes, with weather on top
 // and a little parallax as the mouse moves. Nothing here is an image file.
 import { useEffect, useMemo, useRef } from "react"
-import { paintScene, type Art } from "./kits"
+import { paintScene, readSky, type Art } from "./kits"
 
 export const PALETTE: Record<string, { top: string; bottom: string; fog: string; far: string; near: string; light: string }> = {
   daylight: { top: "#39414f", bottom: "#8d8672", fog: "#c9bda2", far: "#5a5a5e", near: "#121318", light: "#ffe3a8" },
@@ -147,10 +147,12 @@ function Weather({ fx, light }: { fx: string; light: string }) {
   return <canvas ref={ref} className="art-weather" />
 }
 
-export function SceneArt({ name, text, art: forced, mood, weather = true }: {
+export function SceneArt({ name, text, art: forced, mood, weather = true, story = "" }: {
   name: string; text: string; art?: string; mood: string; weather?: boolean
+  story?: string     // the Keeper's latest words: storms and blackouts follow the story live
 }) {
   const art = useMemo(() => paintScene(name, text, forced), [name, text, forced])
+  const live = useMemo(() => readSky(story), [story])
   const pal = PALETTE[mood] ?? PALETTE.night
   const root = useRef<HTMLDivElement>(null)
 
@@ -195,7 +197,9 @@ export function SceneArt({ name, text, art: forced, mood, weather = true }: {
         ))}
         <rect width="1600" height="900" fill="url(#floorfade)" />
       </svg>
-      {weather && <Weather fx={art.fx} light={pal.light} />}
+      {weather && <Weather fx={live.weather || art.fx} light={pal.light} />}
+      {live.lightning && <div className="art-lightning" />}
+      {live.dark && <div className="art-dark" />}
     </div>
   )
 }

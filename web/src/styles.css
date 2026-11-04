@@ -75,8 +75,11 @@ details[open] > summary { margin-bottom: 6px; }
 .art-layer { transform: translate(calc(var(--px, 0) * var(--d) * -220px), calc(var(--py, 0) * var(--d) * -80px)); transition: transform .5s ease-out; }
 .art-flicker { animation: flicker 3.7s infinite; }
 @keyframes flicker { 0%, 100% { opacity: 1; } 12% { opacity: .82; } 15% { opacity: .96; } 42% { opacity: .78; } 47% { opacity: 1; } 71% { opacity: .88; } 74% { opacity: .7; } 78% { opacity: .95; } }
+.art-lightning { position: absolute; inset: 0; background: #dfe8ff; opacity: 0; mix-blend-mode: screen; pointer-events: none; animation: lightning 9s infinite; }
+@keyframes lightning { 0%, 41%, 45%, 47%, 100% { opacity: 0; } 42% { opacity: .55; } 43% { opacity: .1; } 44% { opacity: .75; } 46% { opacity: .2; } }
+.art-dark { position: absolute; inset: 0; background: rgba(0,0,0,.72); pointer-events: none; animation: fadein 1.5s ease; }
 .vignette { position: fixed; inset: 0; z-index: 5; pointer-events: none; transition: background 2s ease; }
-@media (prefers-reduced-motion: reduce) { .art-flicker, .planchette { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .art-flicker, .planchette, .art-lightning { animation: none; } }
 
 /* --- title screen --- */
 .title-screen { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(280px, 340px) 1fr; }

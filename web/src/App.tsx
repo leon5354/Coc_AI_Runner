@@ -198,7 +198,8 @@ export default function App() {
   return (
     <>
       {screen === "play" && game && (
-        <SceneArt key={game.state.scene_id} name={game.scene_name} text={game.scene_text} art={game.scene_art} mood={game.mood} />
+        <SceneArt key={game.state.scene_id} name={game.scene_name} text={game.scene_text} art={game.scene_art} mood={game.mood}
+          story={game.state.messages.findLast((m) => m.role === "keeper")?.content} />
       )}
       {screen === "play" && <Vignette stress={stress} />}
       {screen === "title" && <Title ctx={ctx} />}
