@@ -47,6 +47,9 @@ const ZH: Record<string, string> = {
   "Played by": "控制者", "Add": "新增", "🧪 Try a minigame": "🧪 試玩小遊戲", "🎲 Dice log": "🎲 擲骰紀錄", "📜 Export story": "📜 匯出故事",
   "Background music": "背景音樂", "Off": "關閉", "🔇 Turn on sound": "🔇 開啟聲音", "🔊 Sound on": "🔊 聲音已開啟",
   "In use": "使用中", "Remove": "移除", "Add model": "新增模型", "Looking at what this PC can run…": "正在檢查這部電腦……",
+  "Free, private, no key.": "免費、私密、不用金鑰。", "Starting Ollama… reopen Settings in a moment.": "正在啟動 Ollama……請稍後重新打開設定。",
+  "Pick a file up to {n} GB. A bigger one won't fit on the GPU and runs much slower.": "請選 {n} GB 或以下的檔案。太大的模型放不進顯示卡，會慢很多。",
+  "Too big, will be slow": "太大，會很慢",
   "Small model for summaries (optional)": "用於摘要的小型模型（可選）", "Same as the Keeper": "與守秘人相同",
   // minigames
   "Move the candle across the surface…": "把蠟燭在表面上移動……", "Expose the whole surface to the heat": "把整個表面放近熱源",

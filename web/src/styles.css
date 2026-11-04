@@ -215,6 +215,7 @@ details[open] > summary { margin-bottom: 6px; }
 .model { display: flex; gap: 8px; align-items: center; padding: 4px 0; font-size: .9em; }
 .model span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model i { color: var(--muted); font-style: normal; flex: none; }
+.model em { color: var(--danger); font-style: normal; flex: none; font-size: .85em; }
 .model button { padding: 2px 10px; flex: none; }
 .amb.on { border-color: var(--ok); color: var(--ok); }
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 8px 0 12px; overflow-x: auto; }

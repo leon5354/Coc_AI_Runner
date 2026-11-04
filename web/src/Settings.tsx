@@ -22,6 +22,7 @@ function Local({ ctx, brains, reload, use }: { ctx: Ctx; brains: Brains; reload:
   const [status, setStatus] = useState("")
   const { ollama, gpu } = brains
   const active = ctx.meta.llm.provider === "ollama" ? ctx.meta.llm.model : ""
+  const room = gpu ? gpu.gb - 4 : null    // a running model takes about 3 GB more than its file
 
   async function add() {
     if (!pull.trim()) return
@@ -45,10 +46,11 @@ function Local({ ctx, brains, reload, use }: { ctx: Ctx; brains: Brains; reload:
   if (!ollama.installed) return <p className="muted">Install <a href="https://ollama.com" target="_blank" rel="noreferrer">Ollama</a> to run a model on your GPU.</p>
   return (
     <>
-      <p className="muted">{gpu ? `${gpu.name}, ${gpu.gb} GB. ` : ""}{ollama.running ? "Free, private, no key. Pick a model smaller than your GPU memory." : "Starting Ollama… reopen Settings in a moment."}</p>
+      <p className="muted">{gpu ? `${gpu.name}, ${gpu.gb} GB. ` : ""}{ollama.running ? `${t("Free, private, no key.")} ${room !== null ? t("Pick a file up to {n} GB. A bigger one won't fit on the GPU and runs much slower.", { n: room }) : ""}` : t("Starting Ollama… reopen Settings in a moment.")}</p>
       {ollama.models.map((m) => (
         <div key={m.name} className={m.name === active ? "model on" : "model"}>
           <span title={m.name}>{m.name.split("/").pop()}</span><i>{m.gb} GB</i>
+          {room !== null && m.gb > room && <em>{t("Too big, will be slow")}</em>}
           <button disabled={m.name === active} onClick={() => use("ollama", m.name)}>{t(m.name === active ? "In use" : "Use")}</button>
           <button onClick={() => remove(m.name)}>{t("Remove")}</button>
         </div>
