@@ -1,26 +1,14 @@
-// Scene-mood background, sanity vignette, and procedural WebAudio ambience (no audio assets).
-// Ported from interface/atmosphere.py.
+// Sanity vignette and procedural WebAudio ambience (no audio assets).
 import { useEffect, useRef, useState } from "react"
 
-export const MOODS: Record<string, { bg: string; drone: number }> = {
-  daylight: { bg: "linear-gradient(180deg,#1c1e26 0%,#232630 100%)", drone: 110 },
-  dusk: { bg: "linear-gradient(180deg,#161226 0%,#251a33 100%)", drone: 82 },
-  night: { bg: "linear-gradient(180deg,#0b0e16 0%,#121826 100%)", drone: 55 },
-  unearthly: { bg: "linear-gradient(180deg,#0c140f 0%,#1a2418 100%)", drone: 66 },
-}
+const DRONES: Record<string, number> = { daylight: 110, dusk: 82, night: 55, unearthly: 66 }
 
-/** Fixed background per mood + a red vignette that closes in as sanity drops. */
-export function Backdrop({ mood, stress }: { mood: string; stress: number }) {
-  const m = MOODS[mood] ?? MOODS.night
-  const vig = Math.min(0.55, Math.max(0, 1 - stress) * 0.55)
-  return (
-    <>
-      <div className="backdrop" style={{ background: m.bg }} />
-      <div className="vignette" style={{
-        background: `radial-gradient(ellipse at center, transparent 55%, rgba(110,0,0,${vig.toFixed(2)}) 100%)`,
-      }} />
-    </>
-  )
+/** A red vignette that closes in as sanity drops. */
+export function Vignette({ stress }: { stress: number }) {
+  const v = Math.min(0.55, Math.max(0, 1 - stress) * 0.55)
+  return <div className="vignette" style={{
+    background: `radial-gradient(ellipse at center, transparent 55%, rgba(110,0,0,${v.toFixed(2)}) 100%)`,
+  }} />
 }
 
 type Engine = ReturnType<typeof makeEngine>
@@ -80,7 +68,7 @@ export function AmbienceButton({ mood, stress, diceNonce }: { mood: string; stre
     const e = eng.current
     if (!e || !on) return
     const t = e.ctx.currentTime + 2
-    const drone = (MOODS[mood] ?? MOODS.night).drone
+    const drone = DRONES[mood] ?? 55
     e.o1.frequency.linearRampToValueAtTime(drone, t)
     e.o2.frequency.linearRampToValueAtTime(drone * 1.012, t)
     e.filt.frequency.linearRampToValueAtTime(120 + stress * 120, t)
@@ -105,5 +93,5 @@ export function AmbienceButton({ mood, stress, diceNonce }: { mood: string; stre
     setOn(!on)
   }
 
-  return <button className={on ? "wide amb on" : "wide amb"} onClick={toggle}>{on ? "🔊 sound on" : "🔇 enable sound"}</button>
+  return <button className={on ? "amb on" : "amb"} onClick={toggle}>{on ? "🔊 Sound on" : "🔇 Turn on sound"}</button>
 }

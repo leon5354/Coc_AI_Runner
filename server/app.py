@@ -3,21 +3,25 @@
 Turns stream as NDJSON: one JSON line per beat ({label, game}), then {done, game}. The engine's
 keeper_steps() generator already yields per beat, so each line is one thing happening at the table.
 """
+import base64
+import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
 import threading
 from dataclasses import asdict
 from pathlib import Path
+from urllib.parse import urlencode
 
 import requests
 import yaml
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -241,6 +245,34 @@ def _hf_name(text: str) -> str:
     if not re.fullmatch(r"[\w.\-/:]+", name):
         raise HTTPException(400, "That doesn't look like a model name.")
     return name
+
+
+OR_KEY = ROOT / "data" / "openrouter.key"
+if OR_KEY.exists() and not os.getenv("OPENROUTER_API_KEY"):
+    os.environ["OPENROUTER_API_KEY"] = OR_KEY.read_text(encoding="utf-8").strip()
+OR_VERIFIER = {}
+
+
+@app.get("/api/llm/openrouter/login")
+def openrouter_login(request: Request):
+    """OpenRouter's PKCE sign-in. It ends in a normal key: playing still spends the user's credits."""
+    verifier = secrets.token_urlsafe(48)
+    OR_VERIFIER["value"] = verifier
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    back = str(request.url_for("openrouter_callback"))
+    return RedirectResponse("https://openrouter.ai/auth?" + urlencode(
+        {"callback_url": back, "code_challenge": challenge, "code_challenge_method": "S256"}))
+
+
+@app.get("/api/llm/openrouter/callback", name="openrouter_callback")
+def openrouter_callback(code: str):
+    r = requests.post("https://openrouter.ai/api/v1/auth/keys", timeout=20, json={
+        "code": code, "code_verifier": OR_VERIFIER.pop("value", ""), "code_challenge_method": "S256"})
+    if r.status_code != 200 or "key" not in r.json():
+        raise HTTPException(400, f"OpenRouter sign-in failed: {r.text[:200]}")
+    OR_KEY.write_text(r.json()["key"], encoding="utf-8")
+    os.environ["OPENROUTER_API_KEY"] = r.json()["key"]
+    return RedirectResponse("/")
 
 
 class ModelIn(BaseModel):

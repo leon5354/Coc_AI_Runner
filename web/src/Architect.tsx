@@ -42,7 +42,9 @@ export default function Architect({ ctx, onError }: { ctx: Ctx; onError: (e: str
 
   return (
     <div className="architect">
-      <p className="muted">Brainstorm a scenario with the Scripter, then generate a playable campaign file.</p>
+      <div className="row"><button onClick={() => ctx.go("title")}>← Back</button></div>
+      <h2>New scenario</h2>
+      <p className="muted">Talk through an idea with the Scripter, then generate a playable campaign.</p>
       <div className="transcript">
         {history.map((m, i) => (
           <div key={i} className={`msg ${m.role === "user" ? "player" : "keeper"}`}>
@@ -70,7 +72,7 @@ export default function Architect({ ctx, onError }: { ctx: Ctx; onError: (e: str
 
       {made && (
         <div className="success">
-          Campaign saved: <b>{made.file}</b> — validated and ready. Pick it in the sidebar and press Start.
+          Campaign saved: <b>{made.file}</b> — validated and ready. Find it on the title screen.
           <details><summary>View generated YAML</summary><pre>{made.yaml}</pre></details>
         </div>
       )}

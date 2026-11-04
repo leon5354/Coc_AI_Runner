@@ -57,3 +57,4 @@ test_llm_client.py
 web/node_modules/
 web/dist/
 data/settings.json
+data/openrouter.key
