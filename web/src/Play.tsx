@@ -4,7 +4,7 @@ import Markdown from "react-markdown"
 import * as api from "./api"
 import type { Character, Game, Message } from "./api"
 import type { Ctx, FinishedMinigame } from "./App"
-import { Portrait } from "./art/Portrait"
+import { mindOf, Portrait } from "./art/Portrait"
 import type { DieSpec } from "./dice/table"
 import { FrozenMinigame, Minigame } from "./minigames"
 import Panel, { Bar } from "./Panel"
@@ -23,7 +23,7 @@ function Line({ m, chars }: { m: Message; chars: Character[] }) {
   const ch = chars.find((x) => x.name === m.name)
   return (
     <div className={`msg ${m.role}`}>
-      {ch && <Portrait name={ch.name} about={`${ch.personality} ${ch.backstory}`} size={38} ratio={ch.stress / Math.max(ch.max_stress, 1)} />}
+      {ch && <Portrait name={ch.name} about={`${ch.personality} ${ch.backstory}`} size={38} ratio={mindOf(ch)} />}
       <div>{m.name && <div className="who">{m.name}</div>}<Markdown>{c}</Markdown></div>
     </div>
   )
@@ -140,7 +140,7 @@ function PartyRail({ game, open }: { game: Game; open: (id: string, tab?: "items
     <aside className="rail">
       {game.state.characters.map((c) => (
         <button key={c.id} className={c.id === game.state.active_character_id ? "rail-c on" : "rail-c"} onClick={() => open(c.id)} title={`${c.name}: status and items`}>
-          <Portrait name={c.name} about={`${c.personality} ${c.backstory}`} size={62} ratio={c.stress / Math.max(c.max_stress, 1)} down={c.status !== "active"} />
+          <Portrait name={c.name} about={`${c.personality} ${c.backstory}`} size={62} ratio={mindOf(c)} down={c.status !== "active"} />
           <span className="rail-name">{c.name}</span>
           <Bar kind="hp" value={c.hp} max={c.max_hp} label={`${c.hp}`} />
           {game.has_stress && <Bar kind="mind" value={c.stress} max={c.max_stress} label={`${c.stress}`} />}

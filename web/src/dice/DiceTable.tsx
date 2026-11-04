@@ -21,7 +21,7 @@ export type TableProps = {
 }
 
 function resultName(ev: RollEvent) {
-  if (ev.kind === "free") return `= ${ev.roll}`
+  if (ev.kind === "free") return ""
   if (ev.kind === "stress") return ev.success ? "Held firm" : "Shaken"
   return ev.tier
 }

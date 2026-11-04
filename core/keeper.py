@@ -244,7 +244,8 @@ def build_state_block(state, campaign, nudge: bool = False) -> str:
         skills = ", ".join(f"{k} {v}" for k, v in sorted(ch.skills.items(), key=lambda kv: -kv[1])[:6])
         inv = ", ".join(ch.inventory) or "nothing"
         lines.append(f"  - id={ch.id} {ch.name} [{ch.controller}-controlled, {ch.status}] "
-                     f"HP {ch.hp}/{ch.max_hp}, Stress {ch.stress}/{ch.max_stress}; skills: {skills}; carrying: {inv}")
+                     f"HP {ch.hp}/{ch.max_hp}{f', Stress {ch.stress}/{ch.max_stress}' if ch.max_stress > 1 else ''}; "
+                     f"skills: {skills}; carrying: {inv}")
         if ch.personality:
             lines.append(f"      personality: {ch.personality}")
         if ch.backstory:

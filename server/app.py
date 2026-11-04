@@ -153,7 +153,7 @@ def stream_turn(gen, label: str):
                     yield _line({"label": nxt, "game": game_view(), "dice": ENGINE.drain_events()})
             yield _line({"done": True, "game": game_view(), "dice": ENGINE.drain_events()})
         except LLMError as e:    # the story stays clean; Undo + send again retries
-            yield _line({"done": True, "error": str(e).replace("[SYSTEM ERROR] ", ""), "game": game_view()})
+            yield _line({"done": True, "error": str(e).replace("[SYSTEM ERROR] ", "") + " Press ↩ to undo, then try again.", "game": game_view()})
         except Exception as e:   # state is saved per beat, so nothing is lost
             yield _line({"done": True, "error": f"{type(e).__name__}: {e}", "game": game_view()})
         finally:

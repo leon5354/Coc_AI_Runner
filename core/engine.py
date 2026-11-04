@@ -76,6 +76,9 @@ def new_game(campaign_path, protagonist_path=PROTAGONIST_YAML) -> GameState:
                                   backstory=p.get("backstory", ""))
         c.id = unique_id({ch.id for ch in chars}, c.id)   # never collide (widget keys need it)
         chars.append(c)
+    if not rules.get_system(camp.rule_system).has_stress:   # no sanity track: nothing to show or report
+        for c in chars:
+            c.stress, c.max_stress = 0, 1
     state = GameState(
         campaign_file=str(campaign_path), rule_system=camp.rule_system,
         scene_id=camp.first_scene_id(), visited_scenes=[camp.first_scene_id()],

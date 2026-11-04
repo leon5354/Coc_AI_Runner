@@ -6,7 +6,7 @@ import * as api from "./api"
 import type { Character, Game } from "./api"
 import type { Ctx } from "./App"
 import { itemIcon } from "./art/itemIcon"
-import { Portrait } from "./art/Portrait"
+import { mindOf, Portrait } from "./art/Portrait"
 
 type Tab = "status" | "skills" | "items" | "journal"
 const TABS: Record<Tab, string> = { status: "狀態 Status", skills: "技能 Skills", items: "物品 Items", journal: "手記 Journal" }
@@ -33,7 +33,7 @@ function Status({ ctx, game, ch }: { ctx: Ctx; game: Game; ch: Character }) {
     <div className="status-tab">
       <div className="status-head">
         <Portrait name={ch.name} about={`${ch.personality} ${ch.backstory}`} size={132}
-          ratio={ch.stress / Math.max(ch.max_stress, 1)} down={ch.status !== "active"} />
+          ratio={mindOf(ch)} down={ch.status !== "active"} />
         <div className="grow">
           <h2>{ch.name}</h2>
           <p className="muted">{ch.controller === "ai" ? "AI companion" : ch.player_label || "Player"}
@@ -219,7 +219,7 @@ export default function Panel({ ctx, game, who, tab: first, onClose }: {
           <div className="panel-party">
             {chars.map((c) => (
               <button key={c.id} className={c.id === ch.id ? "on" : ""} title={c.name} onClick={() => setId(c.id)}>
-                <Portrait name={c.name} about={`${c.personality} ${c.backstory}`} size={42} ratio={c.stress / Math.max(c.max_stress, 1)} down={c.status !== "active"} />
+                <Portrait name={c.name} about={`${c.personality} ${c.backstory}`} size={42} ratio={mindOf(c)} down={c.status !== "active"} />
               </button>
             ))}
           </div>

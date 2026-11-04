@@ -1,0 +1,171 @@
+schema_version: 2
+rule_system: dnd5e
+setting: generic
+title: The Drowned Bell
+introduction: >
+  The fishing town of Greywick has been losing its sleepers. Every night a bell rings from
+  under the bay, and every morning another bed is empty and wet with salt water. The reeve
+  has put thirty silver and a warm meal on the table for anyone who will make it stop.
+  You arrive with the tide, as the first lamps are lit along the harbour.
+plot_outline: >
+  KEEPER ONLY. A century ago Greywick drowned its old temple to hide what its priests had
+  bound there: Vashka, a hungry tide spirit. The bell that held her was cracked by the last
+  storm. She now calls sleepers down to rebuild her temple with their bodies. The trail runs
+  from the harbour (reeve, the empty beds) to the chapel records, through the sea caves at low
+  tide, to the flooded temple. Ringing the bell true with the silver clapper hidden in the
+  chapel binds her again. Breaking the bell frees the sleepers but frees her too.
+tone: salt, cold iron, and a town too scared to say why
+npcs:
+  - name: Reeve Hanna Marl
+    role: Tired town leader
+    motivation: Get her son back before the town empties.
+    secret: Her son went into the bay on purpose, to look for the bell.
+    voice: Short sentences, never sits down, always looking at the water.
+  - name: Old Tobin
+    role: Bell-ringer of the chapel
+    motivation: Keep the last clapper safe until he dies.
+    secret: He has heard Vashka's voice for years and half believes her.
+    voice: Sings his answers, forgets names, remembers every tide.
+  - name: Vashka
+    role: The thing under the bay
+    motivation: Rise, and fill the town with water.
+    secret: She cannot cross a true note from the bell.
+    voice: Speaks through sleepers, all of them at once, in a warm and patient tone.
+escalation:
+  - Wet footprints lead from every house to the water. Nobody saw who made them.
+  - A sleeper walks past the party, eyes open, humming, and will not stop.
+  - The tide comes in too far. Water stands in the streets and does not go out.
+  - Vashka speaks through someone the party trusts.
+endings:
+  - outcome: bound
+    description: The bell rings true. The tide goes out, and the sleepers wash ashore alive.
+  - outcome: broken
+    description: The bell is destroyed. The sleepers go free, and something vast swims out to sea.
+  - outcome: drowned
+    description: Greywick goes under. The bell rings on, with more hands to pull the rope.
+protagonist:
+  name: Ren Ashdown
+  gender: Nonbinary
+  occupation: Wandering sellsword
+  personality: Dry-humoured, stubborn, hates being told a thing can't be done.
+  backstory: >
+    Grew up on a ship that never came back from a storm like this one, and has listened
+    for bells ever since. Took the reeve's job for the silver, or so they say.
+  stats:
+    HP: 24
+    Skills:
+      Athletics: 5
+      Perception: 3
+      Investigation: 2
+      Insight: 2
+      Persuasion: 1
+      Stealth: 3
+      Survival: 3
+      Longsword: 5
+      Intimidation: 3
+  inventory:
+    - Longsword
+    - Chain shirt
+    - Waterskin
+    - Hooded lantern
+    - Fifty feet of rope
+    - Healing potion
+ai_party:
+  - name: Sister Ilse
+    gender: Female
+    personality: Gentle, blunt, afraid of deep water and honest about it.
+    backstory: A travelling healer of the Lantern order who came to tend the sleepers' families.
+    stats:
+      HP: 18
+      Skills:
+        Medicine: 6
+        Insight: 4
+        Religion: 5
+        Perception: 3
+        Persuasion: 3
+    inventory:
+      - Healer's kit
+      - Lantern-order pendant
+      - Prayer book
+scenes:
+  - id: harbour
+    name: Greywick Harbour
+    art: street
+    mood: dusk
+    description: >
+      Rows of grey cottages lean over a black harbour. Nets hang unmended. Wet footprints
+      run down every lane to the water, and people look away when you notice them.
+    keeper_notes: Let the reeve meet them here. She pays half up front.
+    clues:
+      - id: wet_footprints
+        description: Footprints that all go to the water
+        skill: Investigation
+        difficulty: easy
+        reveals: The prints are barefoot, walk in step, and none of them ever come back.
+      - id: reeve_son
+        description: The reeve's story does not add up
+        skill: Insight
+        difficulty: medium
+        reveals: Her son's bed was dry. He left awake, and he took a lantern.
+    exits:
+      - to: chapel
+        condition: Anyone asks about the bell
+      - to: sea_caves
+        condition: They follow the prints at low tide
+  - id: chapel
+    name: Chapel of the Tide
+    art: chapel
+    mood: dusk
+    description: >
+      A squat stone chapel above the town, its bell tower empty. Old Tobin sweeps the same
+      patch of floor and sings to himself. The records room smells of damp and candle fat.
+    clues:
+      - id: temple_records
+        description: Century-old records of a drowned temple
+        skill: Investigation
+        difficulty: medium
+        reveals: The town flooded its own temple on purpose. A bell was left below to hold something.
+      - id: silver_clapper
+        description: Something hidden under the altar stone
+        skill: Perception
+        difficulty: hard
+        reveals: A silver bell clapper wrapped in oiled cloth. It hums when held near the sea.
+    exits:
+      - to: harbour
+        condition: They go back down to town
+      - to: sea_caves
+        condition: Tobin tells them the way
+  - id: sea_caves
+    name: The Sea Caves
+    art: cellar
+    mood: night
+    description: >
+      At low tide the caves open like a throat. The walls are slick, the air tastes of iron,
+      and from somewhere ahead comes one slow bell note that you feel in your teeth.
+    clues:
+      - id: sleeper_chain
+        description: A line of sleepers carrying stones
+        skill: Perception
+        difficulty: medium
+        reveals: The missing townsfolk walk in a line, eyes open, passing stones down into the dark.
+    exits:
+      - to: drowned_temple
+        condition: They swim or climb down past the sleepers
+      - to: harbour
+        condition: They retreat before the tide turns
+  - id: drowned_temple
+    name: The Drowned Temple
+    art: abyss
+    mood: unearthly
+    description: >
+      A flooded hall under the bay, lit by something green far below. The great bell hangs
+      cracked above black water, and every sleeper in Greywick stands in it up to the chest,
+      humming one note.
+    keeper_notes: Vashka speaks through the sleepers. The clapper rings the bell true. A fight here is a mistake.
+    clues:
+      - id: true_note
+        description: How the bell was meant to ring
+        skill: Religion
+        difficulty: medium
+        reveals: The bell must be struck once, with silver, by someone who says aloud what they fear most.
+    exits: []

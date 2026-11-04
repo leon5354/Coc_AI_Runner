@@ -4,6 +4,9 @@ import { hash } from "./kits"
 
 const HUES = ["#8f3b3b", "#3b6a8f", "#6a4b8f", "#3b8f73", "#8f6a3b", "#4b5a8f", "#8f3b6e"]
 
+/** How steady a mind looks on a portrait. Systems without sanity are always 1. */
+export const mindOf = (c: { stress: number; max_stress: number }) => (c.max_stress > 1 ? c.stress / c.max_stress : 1)
+
 export function Portrait({ name, about = "", size = 64, ratio = 1, down = false }: {
   name: string; about?: string; size?: number; ratio?: number; down?: boolean
 }) {
