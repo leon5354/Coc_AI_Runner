@@ -40,6 +40,7 @@ function Status({ ctx, game, ch }: { ctx: Ctx; game: Game; ch: Character }) {
             {ch.status !== "active" && <b className="danger"> · {ch.status.toUpperCase()}</b>}</p>
           <Bar kind="hp" value={ch.hp} max={ch.max_hp} label={`HP ${ch.hp} / ${ch.max_hp}`} />
           {game.has_stress && <Bar kind="mind" value={ch.stress} max={ch.max_stress} label={`${game.stress_name} ${ch.stress} / ${ch.max_stress}`} />}
+          {ch.luck > 0 && <Bar kind="luck" value={ch.luck} max={99} label={`Luck ${ch.luck}`} />}
           <label className="toggle">
             <input type="checkbox" checked={ch.controller === "ai"} onChange={(e) => patch({ controller: e.target.checked ? "ai" : "human" })} />
             Played by AI

@@ -56,6 +56,9 @@ assert c.post("/api/game/act", json={"character_id": pid, "text": "x"}).status_c
 # roll: dice result rides on the first line, keeper outcome after (clue + stress applied)
 lines = turn("/api/game/roll")
 assert lines[0]["dice"][0]["roll"] >= 1 and lines[0]["dice"][0]["dice"]
+if lines[-1]["game"]["state"]["pending_push"]:       # failed: the player may answer before the Keeper speaks
+    assert c.post("/api/game/act", json={"character_id": pid, "text": "x"}).status_code == 409
+    lines = turn("/api/game/accept")
 st = lines[-1]["game"]["state"]
 assert st["pending_roll"] is None
 assert any(m["role"] == "dice" for m in st["messages"])

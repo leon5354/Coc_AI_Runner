@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import * as api from "./api"
-import type { Game, Meta, Payload, RollEvent, TurnLine } from "./api"
+import type { Game, Meta, Payload, PendingRoll, RollEvent, TurnLine } from "./api"
 import Architect from "./Architect"
 import { SceneArt } from "./art/SceneArt"
 import { Vignette } from "./Atmosphere"
@@ -30,8 +30,8 @@ export type Ctx = {
   setDraft: (s: string) => void
   go: (s: Screen) => void
   openSettings: () => void
-  /** Open the dice table for the pending roll. */
-  rollPending: () => void
+  /** Open the dice table for the pending roll, or for pushing a failed one (with the player's reason). */
+  rollPending: (pushWhy?: string) => void
   /** Open the dice table for loose dice. */
   freeRoll: (expr: string, preset: DieSpec[]) => void
 }
@@ -142,8 +142,7 @@ export default function App() {
     }
   }
 
-  function presetDice(g: Game): DieSpec[] {
-    const pr = g.state.pending_roll!
+  function presetDice(g: Game, pr: PendingRoll): DieSpec[] {
     const net = Math.abs((pr.bonus ?? 0) - (pr.penalty ?? 0))
     if (g.dice_spec.kind === "d100_two_d10") {
       const tens = g.state.rule_system === "coc7e" ? 1 + net : 1
@@ -152,17 +151,22 @@ export default function App() {
     return Array.from({ length: 1 + net }, () => ({ die: "d20" as const }))
   }
 
-  function rollPending() {
+  function rollPending(pushWhy?: string) {
     const g = gameRef.current
-    if (!g?.state.pending_roll) return
-    const pr = g.state.pending_roll
+    const pr = g && (pushWhy ? g.state.pending_push : g.state.pending_roll)
+    if (!g || !pr) return
     const who = g.state.characters.find((c) => c.id === pr.character_id)
     const extra = (pr.bonus ?? 0) > (pr.penalty ?? 0) ? " · bonus" : (pr.penalty ?? 0) > (pr.bonus ?? 0) ? " · penalty" : ""
     setTable({
-      id: Date.now(), title: `${who?.name} — ${pr.skill}`,
-      subtitle: `${g.roll_preview?.need} (${pr.difficulty})${extra} · about ${g.roll_preview?.chance}% chance`,
-      preset: presetDice(g),
-      onThrow: () => new Promise<RollEvent>((resolve) => { throwWaiter.current = resolve; turn("/api/game/roll") }),
+      id: Date.now(), title: `${who?.name} — ${pr.skill}${pushWhy ? " (pushed)" : ""}`,
+      subtitle: pushWhy ? "Fail this and something terrible happens"
+        : `${g.roll_preview?.need} (${pr.difficulty})${extra} · about ${g.roll_preview?.chance}% chance`,
+      preset: presetDice(g, pr),
+      onThrow: () => new Promise<RollEvent>((resolve) => {
+        throwWaiter.current = resolve
+        if (pushWhy) turn("/api/game/push", { text: pushWhy })
+        else turn("/api/game/roll")
+      }),
       onDone: closeTable,
       onCancel: () => setTable(null),
     })

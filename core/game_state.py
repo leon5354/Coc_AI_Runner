@@ -43,6 +43,7 @@ class CharacterState:
     memory_summary: str = ""         # their own chronicle: what THEY lived through, in their voice
     relationships: dict = field(default_factory=dict)  # name -> what they privately think of them
     item_notes: dict = field(default_factory=dict)     # item name -> description, filled on inspect
+    luck: int = 0                    # spendable Luck, in systems that have it
 
 
 @dataclass
@@ -66,6 +67,7 @@ class GameState:
     messages_archive: list = field(default_factory=list)  # compacted out, UI-only
     pending_roll: dict = None        # {character_id, skill, target, difficulty, reason}
     pending_minigame: dict = None    # {type, ...payload} set by the keeper's control block
+    pending_push: dict = None        # a failed roll waiting: accept, push, or spend Luck
     minigame_count: int = 0          # total minigames launched — gives each a unique widget key
     rolls_since_action: int = 0      # human rolls since the player last acted (chain guard)
     dice_log: list = field(default_factory=list)

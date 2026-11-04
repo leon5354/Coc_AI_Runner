@@ -1,6 +1,7 @@
 """UI-agnostic game engine: the turn loop, roll gate, effect application, saves."""
 import re
 from dataclasses import asdict
+from types import SimpleNamespace
 from pathlib import Path
 
 import yaml
@@ -76,9 +77,14 @@ def new_game(campaign_path, protagonist_path=PROTAGONIST_YAML) -> GameState:
                                   backstory=p.get("backstory", ""))
         c.id = unique_id({ch.id for ch in chars}, c.id)   # never collide (widget keys need it)
         chars.append(c)
-    if not rules.get_system(camp.rule_system).has_stress:   # no sanity track: nothing to show or report
+    system = rules.get_system(camp.rule_system)
+    if not system.has_stress:   # no sanity track: nothing to show or report
         for c in chars:
             c.stress, c.max_stress = 0, 1
+    if system.can_push:
+        sheets = [proto] + list(camp.ai_party)
+        for c, sheet in zip(chars, sheets):
+            c.luck = int(sheet.get("stats", sheet).get("Luck", 50))
     state = GameState(
         campaign_file=str(campaign_path), rule_system=camp.rule_system,
         scene_id=camp.first_scene_id(), visited_scenes=[camp.first_scene_id()],
@@ -200,7 +206,53 @@ class Engine:
         self.state.pending_roll = None
         self._record_roll(char.name, pr["skill"], result)
         self.outcome = self._outcome_prompt(pr["skill"], result)
+        if not result.success and result.tier != "Fumble" and self.system.can_push:
+            need = self.system.need(pr["target"], pr.get("difficulty", "regular"))
+            self.state.pending_push = {**pr, "roll": result.roll, "need": need, "luck_cost": result.roll - need}
         self.state.messages.append({"role": "dice", "name": char.name, "content": line})
+        self.state.save()
+        return result
+
+    def accept_failure(self) -> str:
+        """Take the failed roll as it stands. Returns what to ask the keeper."""
+        self.state.pending_push = None
+        self.state.save()
+        return self.outcome
+
+    def spend_luck(self):
+        """Buy a failed roll up to a bare success, point for point. Returns the keeper prompt, or None."""
+        p = self.state.pending_push
+        char = self.state.get_character(p["character_id"]) if p else None
+        if not char or p["luck_cost"] > char.luck:
+            return None
+        self._take_snapshot()
+        char.luck -= p["luck_cost"]
+        line = f"{char.name} — {p['skill']}: spent {p['luck_cost']} Luck ({p['roll']} becomes {p['need']}) -> Success"
+        self.state.dice_log.append(line)
+        self.state.messages.append({"role": "dice", "name": char.name, "content": line})
+        self.state.pending_push = None
+        self.state.save()
+        won = SimpleNamespace(success=True)
+        return self._outcome_prompt(p["skill"], won)
+
+    def push_roll(self, text: str):
+        """Try harder: one more roll, and failing it must cost something. Returns the RollResult."""
+        p = self.state.pending_push
+        if not p:
+            return None
+        self._take_snapshot()
+        char = self.state.get_character(p["character_id"])
+        self.state.messages.append({"role": "player", "name": char.name, "content": text})
+        result = self.system.skill_check(p["target"], p.get("difficulty", "regular"),
+                                         p.get("bonus", 0), p.get("penalty", 0))
+        line = f"{char.name} — {p['skill']} (pushed): {result.detail}"
+        self.state.dice_log.append(line)
+        self.state.messages.append({"role": "dice", "name": char.name, "content": line})
+        self.state.pending_push = None
+        self._record_roll(char.name, f"{p['skill']} (pushed)", result)
+        self.outcome = self._outcome_prompt(p["skill"], result)
+        if not result.success:
+            self.outcome += " This was a PUSHED roll and it failed: something seriously bad happens now."
         self.state.save()
         return result
 
@@ -280,7 +332,7 @@ class Engine:
         result = self.roll_dice()
         if result is None:
             return None
-        for _ in self.keeper_steps(self.outcome):
+        for _ in self.keeper_steps(self.accept_failure()):
             pass
         return result
 

@@ -41,12 +41,37 @@ function RollGate({ ctx, game }: { ctx: Ctx; game: Game }) {
           <h3>{who?.name} must roll <b>{pr.skill}</b></h3>
           <p className="muted">{game.roll_preview?.need} · {pr.difficulty}{mod > 0 ? " · bonus" : mod < 0 ? " · penalty" : ""} · about {game.roll_preview?.chance}%{pr.reason ? ` · ${pr.reason}` : ""}</p>
         </div>
-        <button className="primary big" disabled={!!ctx.busy} onClick={ctx.rollPending}>🎲 Pick up the dice</button>
+        <button className="primary big" disabled={!!ctx.busy} onClick={() => ctx.rollPending()}>🎲 Pick up the dice</button>
       </div>
       <form className="row" onSubmit={(e) => { e.preventDefault(); if (arg.trim()) ctx.turn("/api/game/negotiate", { text: arg.trim() }) }}>
         <input className="grow" value={arg} onChange={(e) => setArg(e.target.value)} disabled={!!ctx.busy}
           placeholder="…or argue for a different approach" />
         <button type="submit" disabled={!!ctx.busy || !arg.trim()}>Negotiate</button>
+      </form>
+    </div>
+  )
+}
+
+function PushGate({ ctx, game }: { ctx: Ctx; game: Game }) {
+  const p = game.state.pending_push!
+  const who = game.state.characters.find((c) => c.id === p.character_id)
+  const [why, setWhy] = useState("")
+  const afford = who && p.luck_cost <= who.luck
+  return (
+    <div className="gate">
+      <div className="gate-head">
+        <div className="grow">
+          <h3>{who?.name} failed <b>{p.skill}</b></h3>
+          <p className="muted">Rolled {p.roll}, needed {p.need} or less. You have {who?.luck} Luck.</p>
+        </div>
+        <button disabled={!!ctx.busy} onClick={() => ctx.turn("/api/game/accept")}>Accept it</button>
+        <button disabled={!!ctx.busy || !afford} title="Spend Luck to turn this into a bare success"
+          onClick={() => ctx.turn("/api/game/luck")}>🍀 Spend {p.luck_cost} Luck</button>
+      </div>
+      <form className="row" onSubmit={(e) => { e.preventDefault(); if (why.trim()) ctx.rollPending(why.trim()) }}>
+        <input className="grow" value={why} onChange={(e) => setWhy(e.target.value)} disabled={!!ctx.busy}
+          placeholder="Or push it: how do you try harder? Failing again will cost you." />
+        <button type="submit" className="primary" disabled={!!ctx.busy || !why.trim()}>Push the roll</button>
       </form>
     </div>
   )
@@ -224,7 +249,8 @@ export default function Play({ ctx, lastMinigame, onMinigameDone }: {
             {ctx.busy && !ctx.partial && <div className="thinking"><span className="spinner" /> {ctx.busy}</div>}
             <div ref={end} />
           </div>
-          {st.pending_roll ? <RollGate ctx={ctx} game={game} />
+          {st.pending_push ? <PushGate ctx={ctx} game={game} />
+            : st.pending_roll ? <RollGate ctx={ctx} game={game} />
             : st.pending_minigame ? (
               <div className="gate">
                 <Minigame key={st.minigame_count} payload={st.pending_minigame} disabled={!!ctx.busy}

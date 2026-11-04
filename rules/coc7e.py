@@ -43,6 +43,7 @@ class CoC7e(RuleSystem):
     label = "Call of Cthulhu 7e"
     difficulty_levels = ["regular", "hard", "extreme"]
     has_stress = True
+    can_push = True
 
     def skill_check(self, skill_value: int, difficulty: str = "regular",
                     bonus_dice: int = 0, penalty_dice: int = 0) -> RollResult:
@@ -84,12 +85,16 @@ class CoC7e(RuleSystem):
 - Good position or preparation: add "bonus": 1 to roll_request. Bad position: "penalty": 1 (max 2).
 - Sanity: request a stress_check when a character witnesses something horrific. Use standard
   loss expressions like "0/1d4" (success loss / failure loss), "1/1d6", "1d4/1d8". Escalate with the horror.
+- A player may PUSH a failed roll by trying harder. A pushed roll that fails again must cost them
+  something serious: injury, a lost item, a terrible discovery, the enemy arriving.
 - Fumbles (96-100 vs skill under 50, or 100) mean disaster; Critical (01) means an exceptional boon.
 - Be fair but unforgiving. The cosmos does not care about the investigators."""
 
+    def need(self, skill_value: int, difficulty: str) -> int:
+        return {"hard": skill_value // 2, "extreme": skill_value // 5}.get(difficulty, skill_value)
+
     def roll_preview(self, skill_value: int, difficulty: str) -> str:
-        need = {"hard": skill_value // 2, "extreme": skill_value // 5}.get(difficulty, skill_value)
-        return f"d100 under {need}"
+        return f"d100 under {self.need(skill_value, difficulty)}"
 
     def character_sheet_defaults(self) -> dict:
         return {

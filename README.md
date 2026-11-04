@@ -35,6 +35,8 @@ Adding a system is one file in `rules/` implementing the `RuleSystem` interface 
   rule system's tiers, with an animated 3D dice tumble in the UI.
 - **Consequences** — HP and stress/sanity actually change from roll outcomes and scripted
   events; status changes (unconscious, insane) apply automatically.
+- **Push and Luck (Call of Cthulhu)** — after a failed roll, accept it, spend Luck to buy a
+  bare success, or push it: one more roll, and failing that one costs you something serious.
 - **Roll gate + negotiation** — the game pauses on a requested roll; roll, or argue for a
   different skill before committing.
 - **Live, beat-by-beat turns** — a turn unfolds on screen as it happens (your line → Keeper →

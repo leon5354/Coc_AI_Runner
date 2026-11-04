@@ -402,7 +402,7 @@ def settings(body: SettingsIn):
 # ---------- turns (streamed) ----------
 
 def _not_gated(e: Engine):
-    if e.state.pending_roll or e.state.pending_minigame:
+    if e.state.pending_roll or e.state.pending_minigame or e.state.pending_push:
         raise HTTPException(409, "Resolve the pending roll or minigame first.")
 
 
@@ -439,6 +439,38 @@ def roll():
     if result is None:
         BUSY.release()
         raise HTTPException(409, "No roll is pending.")
+    if e.state.pending_push:     # a failure the player can still answer: the Keeper waits
+        return stream_turn(iter(()), "…")
+    return stream_turn(e.keeper_steps(e.outcome), "The Keeper narrates the outcome…")
+
+
+@app.post("/api/game/accept")
+def accept_failure():
+    e = engine()
+    if not e.state.pending_push:
+        raise HTTPException(409, "No failed roll to answer.")
+    prompt = _begin(e.accept_failure)
+    return stream_turn(e.keeper_steps(prompt), "The Keeper narrates the outcome…")
+
+
+@app.post("/api/game/luck")
+def spend_luck():
+    e = engine()
+    if not e.state.pending_push:
+        raise HTTPException(409, "No failed roll to answer.")
+    prompt = _begin(e.spend_luck)
+    if prompt is None:
+        BUSY.release()
+        raise HTTPException(400, "Not enough Luck.")
+    return stream_turn(e.keeper_steps(prompt), "The Keeper narrates the outcome…")
+
+
+@app.post("/api/game/push")
+def push_roll(body: TextIn):
+    e = engine()
+    if not e.state.pending_push or not body.text.strip():
+        raise HTTPException(409, "Say how you try harder.")
+    _begin(e.push_roll, body.text.strip())
     return stream_turn(e.keeper_steps(e.outcome), "The Keeper narrates the outcome…")
 
 

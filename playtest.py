@@ -88,7 +88,7 @@ def main():
             if state.pending_roll:
                 seen["bonus"] += bool(state.pending_roll.get("bonus") or state.pending_roll.get("penalty"))
                 e.roll_dice()
-                run(e.keeper_steps(e.outcome))
+                run(e.keeper_steps(e.accept_failure() if state.pending_push else e.outcome))
             elif state.pending_minigame:
                 seen["minigames"] += 1
                 run(e.keeper_steps(e.begin_minigame_result("The player solved it after a tense moment.")))

@@ -6,20 +6,21 @@ export type Character = {
   skills: Record<string, number>; inventory: string[]
   personality: string; backstory: string; status: string
   private_thoughts: string[]; memory_summary: string; relationships: Record<string, string>
-  item_notes: Record<string, string>
+  item_notes: Record<string, string>; luck: number
 }
 export type Message = { role: string; name?: string | null; content: string }
 export type PendingRoll = {
   character_id: string; skill: string; target: number; difficulty: string; reason?: string
   bonus?: number; penalty?: number
 }
+export type PendingPush = PendingRoll & { roll: number; need: number; luck_cost: number }
 export type Payload = Record<string, any> & { type: string }
 export type State = {
   scene_id: string; characters: Character[]; active_character_id: string
   party_mode: string; language: string; god_mode: boolean; companion_style: string
   turn_count: number; summary: string
   messages: Message[]; messages_archive: Message[]
-  pending_roll: PendingRoll | null; pending_minigame: Payload | null
+  pending_roll: PendingRoll | null; pending_minigame: Payload | null; pending_push: PendingPush | null
   minigame_count: number; dice_log: string[]; rule_system: string
   visited_scenes: string[]; ending: { outcome: string; description: string } | null
   stats: { rolls?: number; crits?: number; fumbles?: number }

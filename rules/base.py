@@ -53,6 +53,7 @@ class RuleSystem(ABC):
     label: str = "Base"
     difficulty_levels: list = ["regular"]
     has_stress: bool = False   # True if the system has a sanity/stress mechanic
+    can_push: bool = False     # a failed roll may be pushed once, or bought with Luck
 
     @abstractmethod
     def skill_check(self, skill_value: int, difficulty: str = "regular",

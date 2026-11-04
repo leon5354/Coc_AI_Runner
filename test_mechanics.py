@@ -308,6 +308,39 @@ with mock.patch("rules.coc7e.random.randint", side_effect=[0, 5]):      # d100 =
     e.resolve_roll()
 assert clue["id"] in st.discovered_clues
 
+# pushing and Luck (CoC): a failure waits for the player; fumbles and other systems don't
+def failed(*replies, roll=(9, 0)):
+    e, st, hero = fresh(ctrl(roll_request={"character": hero_id, "skill": "Spot Hidden"}), *replies)
+    hero.skills["Spot Hidden"] = 50
+    e.submit_action(hero.id, "I look.")
+    with mock.patch("rules.coc7e.random.randint", side_effect=[roll[0], roll[1]]):
+        r = e.roll_dice()
+    return e, st, hero, r
+
+
+e, st, hero, r = failed(ctrl("Nothing."), roll=(0, 9))    # units 0, tens 90: rolled 90
+assert r.roll == 90 and st.pending_push["need"] == 50 and st.pending_push["luck_cost"] == 40 and hero.luck == 50
+assert e.accept_failure() and st.pending_push is None
+
+e, st, hero, r = failed(ctrl("Nothing."), roll=(0, 9))
+luck_prompt = e.spend_luck()
+assert hero.luck == 10 and st.pending_push is None and luck_prompt and "spent 40 Luck" in st.messages[-1]["content"]
+
+e, st, hero, r = failed(roll=(0, 9))
+hero.luck = 39
+assert e.spend_luck() is None and hero.luck == 39 and st.pending_push, "can't buy what you can't afford"
+
+e, st, hero, r = failed(roll=(0, 9))
+with mock.patch("rules.coc7e.random.randint", side_effect=[0, 9]):
+    r = e.push_roll("I tear up the boards.")
+assert st.pending_push is None and "(pushed)" in st.messages[-1]["content"] and "seriously bad" in e.outcome
+
+e, st, hero, r = failed(roll=(0, 0))                      # 00 + 0 = 100: a fumble can't be saved
+assert r.tier == "Fumble" and st.pending_push is None
+
+dnd_state = new_game("data/campaigns/the_drowned_bell.yaml")
+assert dnd_state.characters[0].luck == 0 and dnd_state.characters[0].max_stress == 1
+
 # keeper asks for a roll AND a dead/insane hero: never a gate for someone who can't act
 e, st, hero = fresh(ctrl(roll_request={"character": hero_id, "skill": "Dodge"}), ctrl("It ends badly."))
 hero.status = "unconscious"
@@ -345,10 +378,11 @@ st.save()
 back = GameState.load(st.save_path())
 assert back.pending_roll["bonus"] == 2 and asdict(back) == asdict(st)
 old = asdict(st)
-for k in ("ending", "stats"):
+for k in ("ending", "stats", "pending_push"):
     old.pop(k)
 for c in old["characters"]:
     c.pop("item_notes")
+    c.pop("luck")
 assert GameState.from_dict(old).ending is None
 
 print("test_mechanics: all checks passed")
