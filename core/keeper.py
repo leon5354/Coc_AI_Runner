@@ -336,6 +336,7 @@ def parse_response(text: str):
             narrative = text[:start].strip()
 
     narrative = narrative.replace("[ROLL_REQUIRED]", "").strip()
+    narrative = re.sub(r"\s*```\w*\s*$", "", narrative)   # a fence the model opened and never used
     if not isinstance(data, dict):
         return narrative, Control.empty()
 

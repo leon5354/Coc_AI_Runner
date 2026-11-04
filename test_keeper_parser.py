@@ -64,4 +64,7 @@ assert c.minigame == {"type": "burn_reveal", "hidden_text": "SECRET", "context":
 n, c = parse_response('X\n```json\n{"minigame": {"type": "tetris"}}\n```')
 assert c.minigame is None
 
+n, _ = parse_response("The sea churns. What do you do? ```\n")
+assert n == "The sea churns. What do you do?", n
+
 print("test_keeper_parser: all checks passed")
