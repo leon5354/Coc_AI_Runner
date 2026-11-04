@@ -218,6 +218,45 @@ class LLMClient:
             raise RuntimeError(str(data.get("result"))[:300])
         return data.get("result") or ""
 
+    def stream(self, messages, system_prompt=None, temperature=0.7, max_tokens=8192):
+        """Yield the reply piece by piece, so the page can type it out live. Raises LLMError."""
+        clean = [{"role": m["role"], "content": m["content"]} for m in messages]
+        t0, parts = time.time(), []
+        try:
+            if self.provider == "ollama":
+                if "qwen3" in self.model_name.lower():
+                    system_prompt = (system_prompt or "") + " /no_think"
+                msgs = ([{"role": "system", "content": system_prompt}] if system_prompt else []) + clean
+                body = {"model": self.model_name, "messages": msgs, "stream": True, "think": False,
+                        "options": {"temperature": temperature, "num_ctx": OLLAMA_NUM_CTX, "num_predict": max_tokens}}
+                with requests.post(f"{self.base}/api/chat", json=body, stream=True, timeout=(10, 900)) as r:
+                    if r.status_code != 200:
+                        raise RuntimeError(f"Ollama {r.status_code}: {r.text[:200]}")
+                    for line in r.iter_lines():
+                        piece = json.loads(line).get("message", {}).get("content", "")
+                        if piece:
+                            parts.append(piece)
+                            yield piece
+            elif self.provider == "openrouter":
+                msgs = ([{"role": "system", "content": system_prompt}] if system_prompt else []) + clean
+                for ev in self.client.chat.completions.create(model=self.model_name, messages=msgs, stream=True,
+                                                              temperature=temperature, max_tokens=max_tokens):
+                    piece = (ev.choices[0].delta.content or "") if ev.choices else ""
+                    if piece:
+                        parts.append(piece)
+                        yield piece
+            else:   # ponytail: claude_cli and google answer in one piece for now
+                out = check_llm(self.chat(messages, system_prompt, temperature, max_tokens))
+                parts.append(out)
+                yield out
+        except (requests.RequestException, RuntimeError, ValueError) as e:
+            raise LLMError(f"The connection to beyond falters... ({e})")
+        except Exception as e:
+            if type(e).__name__ == "LLMError":
+                raise
+            raise LLMError(f"The connection to beyond falters... ({e})")
+        _log_call("stream", self.provider, self.model_name, messages, system_prompt, "".join(parts), t0)
+
     def get_completion(self, prompt, system_prompt=None, temperature=0.7, max_tokens=8192, json_mode=False):
         """
         Unified method to get a text completion.

@@ -79,6 +79,8 @@ function Sky({ mood, art }: { mood: string; art: Art }) {
       gl.drawArrays(gl.TRIANGLES, 0, 3)
       if (still) cancelAnimationFrame(raf)
     }
+    gl.uniform1f(u("time"), 40)
+    gl.drawArrays(gl.TRIANGLES, 0, 3)       // first frame right away, even in a background tab
     raf = requestAnimationFrame(draw)
     return () => { cancelAnimationFrame(raf); removeEventListener("resize", resize) }
   }, [mood, art])

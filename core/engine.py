@@ -15,6 +15,7 @@ from rules.base import parse_dice, validate_dice
 
 PROTAGONIST_YAML = Path(__file__).resolve().parent.parent / "data" / "agents" / "protagonist.yaml"
 MAX_KEEPER_CYCLES = 3  # bound on chained auto-rolls in one turn
+OUTCOME = "Narrate the outcome of the roll above."
 
 ITEM_PROMPT = """You describe one item from a tabletop horror game, as the character holding it
 would notice it. Two short sentences of concrete physical detail, plain text only. Never invent
@@ -95,6 +96,7 @@ class Engine:
         self._researcher = None
         self._undo_snapshot = None
         self.events = []               # dice to show the player; the UI drains these per beat
+        self.outcome = OUTCOME         # what to ask the keeper after the last human roll
         self._repair_character_ids()   # fix pre-fix saves with colliding ids (e.g. non-ASCII names)
 
     def _repair_character_ids(self):
@@ -135,6 +137,15 @@ class Engine:
     def drain_events(self) -> list:
         out, self.events = self.events, []
         return out
+
+    def _outcome_prompt(self, skill, result) -> str:
+        """A success with a scene clue's skill finds that clue: the dice decide, not the model's memory."""
+        scene = self.campaign.scene(self.state.scene_id) or {}
+        for c in scene.get("clues", []) if result.success else []:
+            if c["id"] not in self.state.discovered_clues and (c.get("skill") or "").lower() == skill.lower():
+                self.state.discovered_clues.append(c["id"])
+                return f"{OUTCOME} This success uncovers a clue. Reveal it in the story now: {str(c.get('reveals', '')).strip()}"
+        return OUTCOME
 
     def _record_roll(self, who, label, result, kind="skill"):
         """Count a roll for the end screen and queue it for the dice table."""
@@ -183,6 +194,7 @@ class Engine:
         self.state.dice_log.append(line)
         self.state.pending_roll = None
         self._record_roll(char.name, pr["skill"], result)
+        self.outcome = self._outcome_prompt(pr["skill"], result)
         self.state.messages.append({"role": "dice", "name": char.name, "content": line})
         self.state.save()
         return result
@@ -263,7 +275,7 @@ class Engine:
         result = self.roll_dice()
         if result is None:
             return None
-        for _ in self.keeper_steps("Narrate the outcome of the roll above."):
+        for _ in self.keeper_steps(self.outcome):
             pass
         return result
 
@@ -416,7 +428,7 @@ class Engine:
         Sets pending_roll / pending_minigame and returns when it needs the player."""
         actors_requested = []
         for _ in range(MAX_KEEPER_CYCLES):
-            narrative, ctrl = self.keeper.respond(self.state, input_text)
+            narrative, ctrl = yield from self.keeper.respond_steps(self.state, input_text)
             if narrative:
                 self.state.messages.append({"role": "keeper", "content": narrative})
             self._apply_effects(ctrl)
@@ -460,7 +472,7 @@ class Engine:
             self._record_roll(char.name, skill, result)
             self.state.save()
             yield "The Keeper narrates the outcome…"
-            input_text = "Narrate the outcome of the roll above."
+            input_text = self._outcome_prompt(skill, result)
 
         if allow_companions and not self.state.pending_roll and not self.state.pending_minigame:
             yield from self._companion_turns_steps(actors_requested)

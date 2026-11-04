@@ -36,7 +36,7 @@ from core import game_state  # noqa: E402
 from core import minigames_catalog as mc  # noqa: E402
 from core.engine import Engine, new_game  # noqa: E402
 from core.game_state import GameState, save_exists, slugify, unique_id  # noqa: E402
-from core.keeper import LANGUAGE_LABELS  # noqa: E402
+from core.keeper import LANGUAGE_LABELS, Partial  # noqa: E402
 from core.llm_client import (CLAUDE_MODELS, MAIN_MODELS, PROVIDERS, UTIL_MODELS, LLMError,  # noqa: E402
                              ollama_base)
 
@@ -145,7 +145,10 @@ def stream_turn(gen, label: str):
         try:
             yield _line({"label": label, "game": game_view(), "dice": ENGINE.drain_events()})
             for nxt in gen:
-                yield _line({"label": nxt, "game": game_view(), "dice": ENGINE.drain_events()})
+                if isinstance(nxt, Partial):
+                    yield _line({"partial": nxt.text})
+                else:
+                    yield _line({"label": nxt, "game": game_view(), "dice": ENGINE.drain_events()})
             yield _line({"done": True, "game": game_view(), "dice": ENGINE.drain_events()})
         except LLMError as e:    # the story stays clean; Undo + send again retries
             yield _line({"done": True, "error": str(e).replace("[SYSTEM ERROR] ", ""), "game": game_view()})
@@ -431,8 +434,7 @@ def roll():
     if result is None:
         BUSY.release()
         raise HTTPException(409, "No roll is pending.")
-    return stream_turn(e.keeper_steps("Narrate the outcome of the roll above."),
-                       "The Keeper narrates the outcome…")
+    return stream_turn(e.keeper_steps(e.outcome), "The Keeper narrates the outcome…")
 
 
 @app.post("/api/game/negotiate")

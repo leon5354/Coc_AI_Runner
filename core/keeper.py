@@ -15,6 +15,12 @@ RECENT_WINDOW = 20  # messages sent verbatim
 
 
 @dataclass
+class Partial:
+    """Narration so far, while the Keeper is still talking. Not a beat of its own."""
+    text: str
+
+
+@dataclass
 class Control:
     roll_request: dict = None      # {character, skill, difficulty, reason, bonus?, penalty?}
     stress_check: dict = None      # {character, event_id, loss}
@@ -283,6 +289,7 @@ as a friendly game master at the table would.
 - No JSON block. Just talk to them."""
 
 
+_HIDE_RE = re.compile(r"```|\{\s*\"roll_request|\{\s*$")   # where the control block starts
 _FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
@@ -364,13 +371,20 @@ class Keeper:
         return check_llm(self.llm.chat(msgs, system_prompt=system_prompt, temperature=0.5,
                                        max_tokens=600)) or ""
 
-    def respond(self, state, user_input: str):
-        """One keeper turn. Returns (narrative, Control)."""
+    def respond_steps(self, state, user_input: str):
+        """One keeper turn, as a generator: yields Partial text, returns (narrative, Control)."""
         nudge = self.parse_failures >= 2
         msgs = build_messages(state, self.campaign, self.system, user_input, nudge)
         system_prompt = build_system_prompt(self.campaign, self.system, state.language,
                                              state.god_mode, state=state)
-        raw = check_llm(self.llm.chat(msgs, system_prompt=system_prompt))
+        if hasattr(self.llm, "stream"):
+            raw = ""
+            for piece in self.llm.stream(msgs, system_prompt=system_prompt):
+                raw += piece
+                shown = _HIDE_RE.split(raw, 1)[0]
+                yield Partial(shown.replace("[ROLL_REQUIRED]", ""))
+        else:
+            raw = check_llm(self.llm.chat(msgs, system_prompt=system_prompt))
         narrative, ctrl = parse_response(raw)
         if ctrl == Control.empty() and "```" not in (raw or ""):
             self.parse_failures += 1

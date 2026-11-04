@@ -93,13 +93,13 @@ engine = Engine(state, llm=ScriptMock([NARRATE]))
 block = build_state_block(state, engine.campaign)
 assert "background:" in block
 assert "occult after a" in block, "protagonist background must be in the keeper's state block"
-assert "Investigator / Analyst" in block, "occupation must be folded into the background"
+assert "Private inquiry agent" in block, "occupation must be folded into the background"
 assert "discreet inquiry agent" in block, "campaign protagonist_hints must be folded in"
 assert "Miskatonic folklore lecturer" in block, "companion backstory must be in the state block"
 
 # --- backgrounds are editable and persist ---
-engine.update_character("player", backstory="Ex-priest who lost the faith.", personality="Grim.")
-assert state.get_character("player").backstory == "Ex-priest who lost the faith."
+engine.update_character(state.characters[0].id, backstory="Ex-priest who lost the faith.", personality="Grim.")
+assert state.characters[0].backstory == "Ex-priest who lost the faith."
 assert "Ex-priest" in build_state_block(state, engine.campaign)
 c = engine.add_character("Nurse Adler", controller="ai", backstory="Field medic, war-shaken.")
 assert c.backstory == "Field medic, war-shaken."

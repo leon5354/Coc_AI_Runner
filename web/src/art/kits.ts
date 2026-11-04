@@ -48,7 +48,7 @@ function ridge(r: Rng, y: number, amp: number, step = 60) {
 }
 
 function pine(r: Rng, x: number, base: number, h: number) {
-  const w = h * 0.34, tiers = 5
+  const w = h * 0.3, tiers = 8
   let d = `M${f(x - 5)} ${f(base)}L${f(x - 5)} ${f(base - h * 0.14)}`
   for (let i = 0; i < tiers; i++) {
     const t = i / tiers, y = base - h * (0.14 + t * 0.8), s = w * (1 - t) + 3
@@ -209,12 +209,13 @@ function cellar(r: Rng): Art {
   for (const [w, tone] of [[300, 0.34], [520, 0.5], [820, 0.66], [1240, 0.84]] as const) {
     const h = w * 1.05, x = 800 - w / 2, y = 780 - h
     let stones = ""
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < 40; i++) {
       const sx = r() * W, sy = r() * H
-      stones += rect(sx, sy, 34 + r() * 50, 14 + r() * 12)
+      if (sx > x - 60 && sx < x + w + 10 && sy > y - 40) continue   // only on the wall, never in the opening
+      stones += rect(sx, sy, 34 + r() * 50, 12 + r() * 10)
     }
     layers.push({ d: full + arch(x, y, w, h + 200), depth: 0.04 + tone * 0.14, tone, hole: true })
-    if (tone > 0.6) layers.push({ d: stones, depth: 0.04 + tone * 0.14, tone: tone + 0.08 })
+    if (tone > 0.6) layers.push({ d: stones, depth: 0.04 + tone * 0.14, tone: Math.min(1, tone + 0.05) })
   }
   layers.push(
     { d: poly(0, 900, 1600, 900, 1600, 800, 0, 800), depth: 0.2, tone: 0.72 },
@@ -377,13 +378,13 @@ function chapel(): Art {
     outdoors: false, fx: "embers",
     layers: [
       { d: full + circle(800, 300, 170) + side, depth: 0.03, tone: 0.32, hole: true },
-      { d: panes, depth: 0.03, tone: 0.6 },
+      { d: panes, depth: 0.03, tone: 0, light: 0.32 },
       { d: `M0 900V40H1600V900H1440V160Q1440 60 1340 40H260Q160 60 160 160V900z`, depth: 0.14, tone: 0.72 },
       { d: rect(700, 580, 200, 60) + rect(740, 640, 120, 150) + rect(794, 430, 12, 150) + rect(760, 470, 80, 12), depth: 0.1, tone: 0.82 },
       { d: pews, depth: 0.2, tone: 0.92 },
       { d: candle(690, 580, 30) + candle(910, 580, 30), depth: 0.1, tone: 0.95 },
     ],
-    glows: [{ x: 800, y: 300, r: 420, o: 0.6 }, { x: 690, y: 548, r: 130, flicker: true, o: 0.8, color: "#ffb070" }, { x: 910, y: 548, r: 130, flicker: true, o: 0.8, color: "#ffb070" }],
+    glows: [{ x: 800, y: 300, r: 420, o: 0.5 }, { x: 730, y: 260, r: 190, o: 0.5, color: "#d8344a" }, { x: 870, y: 270, r: 190, o: 0.5, color: "#3a7ae0" }, { x: 800, y: 370, r: 170, o: 0.45, color: "#e0b040" }, { x: 690, y: 548, r: 130, flicker: true, o: 0.8, color: "#ffb070" }, { x: 910, y: 548, r: 130, flicker: true, o: 0.8, color: "#ffb070" }],
     moon: undefined,
   }
 }
@@ -473,8 +474,8 @@ function hills(r: Rng): Art {
 const KITS: Record<string, { words: RegExp; paint: (r: Rng, text: string) => Art }> = {
   elevator: { words: /elevator|lift|電梯|升降機|𨋢/i, paint: elevator },
   abyss: { words: /abyss|void|pit|深淵|虛空|最終/i, paint: abyss },
-  living: { words: /living room|television|客廳|電視|螢幕|screen/i, paint: livingroom },
-  bedroom: { words: /bedroom|臥室|房間|睡房/i, paint: bedroom },
+  living: { words: /living room|television|sofa|couch|客廳|電視|螢幕|沙發|screen/i, paint: livingroom },
+  bedroom: { words: /bedroom|bed|臥室|睡房|床|套房/i, paint: bedroom },
   attic: { words: /attic|閣樓|天台/i, paint: attic },
   cellar: { words: /cellar|crypt|catacomb|tomb|basement|sewer|地下|墓|地窖|地牢/i, paint: cellar },
   library: { words: /library|archive|records|athenaeum|圖書|檔案|書庫/i, paint: library },
@@ -485,7 +486,7 @@ const KITS: Record<string, { words: RegExp; paint: (r: Rng, text: string) => Art
   wreck: { words: /crash|wreck|lander|battlefield|ruin|墜|殘骸|廢墟|戰場/i, paint: wreck },
   forest: { words: /forest|wood|pine|trail|camp|clearing|snow|林|樹|徑|營|雪|霜|空地/i, paint: forest },
   street: { words: /street|alley|city|town|harbou?r|docks|街|巷|城|鎮|碼頭/i, paint: street },
-  hall: { words: /house|ground floor|manor|mansion|parlou?r|屋|宅|大廳|玄關/i, paint: hall },
+  hall: { words: /ground floor|manor|mansion|parlou?r|屋|宅|大廳|玄關|room|室|廳/i, paint: hall },
   office: { words: /office|study|desk|辦公|書房|事務所/i, paint: office },
 }
 

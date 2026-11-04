@@ -19,6 +19,7 @@ export type Ctx = {
   meta: Meta
   game: Game | null
   busy: string                                   // label of the beat in flight, "" when idle
+  partial: string                                // the Keeper's words so far, while they arrive
   /** Quick action that returns the new game view. */
   call: (fn: () => Promise<Game | null>) => Promise<void>
   /** Streamed turn: one beat per line. */
@@ -57,6 +58,7 @@ export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [game, setGameRaw] = useState<Game | null>(null)
   const [busy, setBusy] = useState("")
+  const [partial, setPartial] = useState("")
   const [error, setError] = useState("")
   const [screen, setScreen] = useState<Screen>("title")
   const [settings, setSettings] = useState(false)
@@ -113,6 +115,8 @@ export default function App() {
   }
 
   async function handle(line: TurnLine) {
+    if (line.partial !== undefined) { setPartial(line.partial); return }
+    setPartial("")
     const events = line.dice ?? []
     for (const ev of events.filter((e) => e.kind !== "stress")) await showDice(ev)  // dice land first
     if (line.game) setGame(line.game)
@@ -177,7 +181,7 @@ export default function App() {
   if (!meta) return <div className="boot">{error || "Opening the case files…"}</div>
 
   const ctx: Ctx = {
-    meta, game, busy, call, turn, refreshMeta, setError, draft, setDraft, go: setScreen,
+    meta, game, busy, partial, call, turn, refreshMeta, setError, draft, setDraft, go: setScreen,
     openSettings: () => setSettings(true), rollPending, freeRoll,
   }
   const active = game && (game.state.characters.find((c) => c.id === game.state.active_character_id)

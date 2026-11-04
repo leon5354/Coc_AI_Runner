@@ -187,7 +187,7 @@ export default function Play({ ctx, lastMinigame, onMinigameDone }: {
   const [card, setCard] = useState(game?.scene_name ?? "")
   const count = game ? game.state.messages_archive.length + game.state.messages.length : 0
   // braces matter: newer browsers return a Promise from scrollIntoView, which React would treat as cleanup
-  useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth", block: "end" }) }, [count, ctx.busy])
+  useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth", block: "end" }) }, [count, ctx.busy, ctx.partial.length >> 6])
   useEffect(() => {
     if (!game) return
     setCard(game.scene_name)
@@ -220,7 +220,8 @@ export default function Play({ ctx, lastMinigame, onMinigameDone }: {
         <section className="story">
           <div className="transcript">
             {[...st.messages_archive, ...st.messages].map((m, i) => <Line key={i} m={m} chars={chars} />)}
-            {ctx.busy && <div className="thinking"><span className="spinner" /> {ctx.busy}</div>}
+            {ctx.partial && <div className="msg keeper"><div><Markdown>{ctx.partial}</Markdown></div></div>}
+            {ctx.busy && !ctx.partial && <div className="thinking"><span className="spinner" /> {ctx.busy}</div>}
             <div ref={end} />
           </div>
           {st.pending_roll ? <RollGate ctx={ctx} game={game} />

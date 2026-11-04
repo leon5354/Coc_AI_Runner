@@ -98,7 +98,54 @@ last = lines[-1]["game"]["state"]["messages"][-1]
 assert last["role"] == "companion" and "```" not in last["content"], last
 c.post("/api/game/undo")
 
+# items: inspect costs no turn, give and drop move things, bad names are refused
+item = c.get("/api/game").json()["state"]["characters"][0]["inventory"][0]
+r = c.post("/api/game/items/inspect", json={"character_id": pid, "item": item}).json()
+assert r["note"] and r["game"]["state"]["characters"][0]["item_notes"][item] == r["note"]
+vale = r["game"]["state"]["characters"][1]["id"]
+g = c.post("/api/game/items/give", json={"character_id": pid, "to": vale, "item": item}).json()
+assert item in g["state"]["characters"][1]["inventory"]
+assert c.post("/api/game/items/give", json={"character_id": pid, "to": vale, "item": item}).status_code == 400
+g = c.post("/api/game/items/drop", json={"character_id": vale, "item": item}).json()
+assert item not in g["state"]["characters"][1]["inventory"]
+
+# loose dice tray
+r = c.post("/api/game/free_roll", json={"expr": "2d6+1"}).json()
+assert 3 <= r["dice"]["roll"] <= 13 and len(r["dice"]["dice"]) == 2
+assert c.post("/api/game/free_roll", json={"expr": "banana"}).status_code == 400
+
+# the view carries what the panels need
+g = c.get("/api/game").json()
+assert g["map"] and g["clues_total"] > 0 and g["stress_name"] == "Sanity" and g["rule_label"]
+
+# brains: options never crash; Hugging Face links become Ollama names
+assert set(c.get("/api/llm/options").json()) >= {"ollama", "gpu", "claude", "keys"}
+from server.app import _hf_name  # noqa: E402
+assert _hf_name("https://huggingface.co/Qwen/Qwen3-4B-GGUF") == "hf.co/Qwen/Qwen3-4B-GGUF"
+assert _hf_name(" hf.co/a/b-GGUF:Q4_K_M ") == "hf.co/a/b-GGUF:Q4_K_M"
+assert c.post("/api/llm/pull", json={"name": "rm -rf /; x"}).status_code == 400
+
+# an AI failure reaches the player as an error, and the story stays clean
+import server.app as srv  # noqa: E402
+good = srv.ENGINE.keeper.llm
+
+
+class Broken:
+    def chat(self, *a, **k):
+        return "[SYSTEM ERROR] The connection to beyond falters... (API Error: 500)"
+
+
+srv.ENGINE.keeper.llm = Broken()
+lines = [json.loads(l) for l in c.post("/api/game/act", json={"character_id": pid, "text": "I wait."}).text.splitlines()]
+assert lines[-1].get("error") and "API Error" in lines[-1]["error"]
+assert not any("SYSTEM ERROR" in m["content"] for m in lines[-1]["game"]["state"]["messages"])
+assert c.post("/api/game/undo").status_code == 200
+assert c.post("/api/game/ooc", json={"question": "hm"}).status_code == 502
+srv.ENGINE.keeper.llm = good
+assert c.post("/api/game/ooc", json={"question": "hm"}).status_code == 200    # lock was released
+
 # resume: a fresh start without restart picks up the save
+n = len(c.get("/api/game").json()["state"]["messages"])
 g = c.post("/api/game/start", json={"file": "the_haunting.yaml"}).json()
 assert len(g["state"]["messages"]) == n
 

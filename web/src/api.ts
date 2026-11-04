@@ -49,7 +49,7 @@ export type RollEvent = {
   kind: "skill" | "stress" | "free"; who: string; label: string; roll: number; tier: string
   success: boolean; detail: string; dice: { die: string; value: number; kept: boolean }[]
 }
-export type TurnLine = { label?: string; done?: boolean; error?: string; game: Game | null; dice?: RollEvent[] }
+export type TurnLine = { label?: string; done?: boolean; error?: string; game?: Game | null; dice?: RollEvent[]; partial?: string }
 export type Brains = {
   ollama: { installed: boolean; running: boolean; models: { name: string; gb: number }[] }
   gpu: { name: string; gb: number } | null
