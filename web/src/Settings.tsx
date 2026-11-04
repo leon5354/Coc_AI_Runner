@@ -4,7 +4,6 @@ import { setUiPref, t, uiPref } from "./i18n"
 import * as api from "./api"
 import type { Brains, Game } from "./api"
 import type { Ctx } from "./App"
-import { AmbienceButton } from "./Atmosphere"
 
 function Seg<T extends string>({ options, value, onChange, labels }: {
   options: T[]; value: T; onChange: (v: T) => void; labels?: Record<string, string>
@@ -148,7 +147,6 @@ export default function Settings({ ctx, onClose }: { ctx: Ctx; onClose: () => vo
           onChange={(v) => { setUiPref(v); setUi(v); ctx.refreshMeta() }} />
         <h3>{t("Sound and dice")}</h3>
         <div className="row">
-          <AmbienceButton mood={game?.mood ?? "night"} stress={1} diceNonce={st?.dice_log.length ?? 0} />
           <label className="toggle"><input type="checkbox" checked={fast} onChange={(e) => setFastDice(e.target.checked)} /> {t("Skip the 3D dice")}</label>
         </div>
         {meta.audio.length > 0 && <Music tracks={meta.audio} />}

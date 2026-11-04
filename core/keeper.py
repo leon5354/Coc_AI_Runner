@@ -419,7 +419,7 @@ class Keeper:
                   f"Exits: {'; '.join(exits) or 'none'}\n"
                   f"Puzzle devices: {', '.join(minigames_catalog.for_setting(minigames_catalog.resolve_setting(self.campaign)))}\n"
                   f"Keeper notes: {str(scene.get('keeper_notes', '')).strip()[:300]}")
-        if not scene.get("exits"):        # the last scene: the story can end here
+        if not scene.get("exits") or scene is self.campaign.scenes[-1]:   # the story can end here
             prompt += "\nEndings: " + "; ".join(f"{e.get('outcome')} ({e.get('description')})" for e in self.campaign.endings)
         try:
             data = json.loads(self.llm.get_completion(prompt, system_prompt=REFEREE_PROMPT, temperature=0.1,
@@ -463,7 +463,7 @@ class Keeper:
         if puzzle:
             roll = move = None
         ending = (ruling or {}).get("ending")
-        ending = ending if ending in {e.get("outcome") for e in self.campaign.endings} and not exits else None
+        ending = ending if ending in {e.get("outcome") for e in self.campaign.endings} and (not exits or state.scene_id == self.campaign.scenes[-1]["id"]) else None
         if ending:
             roll = move = puzzle = None
         nudge = self.parse_failures >= 2

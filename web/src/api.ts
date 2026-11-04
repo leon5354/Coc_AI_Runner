@@ -31,6 +31,7 @@ export type Game = {
   scene_index: number; mood: string; dice_spec: DiceSpec; has_stress: boolean; stress_name: string
   rule_label: string; can_undo: boolean; roll_preview: { need: string; chance: number } | null
   clues: { id: string; name: string; text: string }[]; clues_total: number
+  npcs: { name: string; role: string }[]
   map: { id: string; name: string; visited: boolean; exits: string[] }[]
 }
 export type LLMConfig = { provider: string; model: string; util_provider: string; util_model: string }

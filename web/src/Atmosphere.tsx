@@ -56,11 +56,41 @@ function makeEngine() {
       src.connect(bp); bp.connect(g); g.connect(master); src.start(t)
     }
   }
-  return { ctx, master, o1, o2, filt, setHeartbeat, clatter }
+  // weather bed: looped noise, shaped per scene
+  const noise = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate)
+  const nd = noise.getChannelData(0)
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1
+  const bed = ctx.createBufferSource(); bed.buffer = noise; bed.loop = true
+  const shape = ctx.createBiquadFilter()
+  const bedGain = ctx.createGain(); bedGain.gain.value = 0
+  bed.connect(shape); shape.connect(bedGain); bedGain.connect(master); bed.start()
+  let crackle: number | undefined
+  function pop() {
+    const t = ctx.currentTime
+    const src = ctx.createBufferSource(); src.buffer = noise; src.loop = false
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1400 + Math.random() * 2400
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0.05 + Math.random() * 0.08, t)
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.05)
+    src.connect(bp); bp.connect(g); g.connect(master); src.start(t, Math.random() * 2, 0.06)
+  }
+  function setWeather(fx: string) {
+    const beds: Record<string, [BiquadFilterType, number, number]> = {
+      rain: ["highpass", 900, 0.05], snow: ["lowpass", 420, 0.1], fog: ["lowpass", 320, 0.07],
+      embers: ["lowpass", 600, 0.03], dust: ["lowpass", 260, 0.03], spores: ["lowpass", 500, 0.04], sparks: ["bandpass", 2400, 0.008],
+    }
+    const [type, freq, level] = beds[fx] ?? beds.dust
+    shape.type = type
+    shape.frequency.value = freq
+    bedGain.gain.linearRampToValueAtTime(level, ctx.currentTime + 2)
+    clearInterval(crackle); crackle = undefined
+    if (fx === "embers") crackle = window.setInterval(() => { if (Math.random() < 0.6) pop() }, 180)
+  }
+  return { ctx, master, o1, o2, filt, setHeartbeat, clatter, setWeather }
 }
 
 /** Click once to enable (browsers only allow audio after a user gesture). */
-export function AmbienceButton({ mood, stress, diceNonce }: { mood: string; stress: number; diceNonce: number }) {
+export function AmbienceButton({ mood, stress, diceNonce, fx }: { mood: string; stress: number; diceNonce: number; fx: string }) {
   const eng = useRef<Engine | null>(null)
   const lastDice = useRef(diceNonce)
   const [on, setOn] = useState(false)
@@ -74,9 +104,10 @@ export function AmbienceButton({ mood, stress, diceNonce }: { mood: string; stre
     e.o2.frequency.linearRampToValueAtTime(drone * 1.012, t)
     e.filt.frequency.linearRampToValueAtTime(120 + stress * 120, t)
     e.setHeartbeat(stress < 0.6 ? Math.round(45 + (0.6 - stress) * 120) : 0)
+    e.setWeather(fx)
     if (diceNonce > lastDice.current) e.clatter()
     lastDice.current = diceNonce
-  }, [mood, stress, diceNonce, on])
+  }, [mood, stress, diceNonce, on, fx])
 
   useEffect(() => () => { eng.current?.setHeartbeat(0); eng.current?.ctx.close() }, [])
 
@@ -94,5 +125,5 @@ export function AmbienceButton({ mood, stress, diceNonce }: { mood: string; stre
     setOn(!on)
   }
 
-  return <button className={on ? "amb on" : "amb"} onClick={toggle}>{t(on ? "🔊 Sound on" : "🔇 Turn on sound")}</button>
+  return <button className={on ? "amb on" : "amb"} title={t(on ? "🔊 Sound on" : "🔇 Turn on sound")} onClick={toggle}>{on ? "🔊" : "🔇"}</button>
 }

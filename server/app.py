@@ -102,8 +102,12 @@ def game_view():
     near = {x["to"] for c in e.campaign.scenes if c["id"] in seen for x in c.get("exits", [])}
     clues = [{"id": cid, "name": (e.campaign.clue(cid) or {}).get("description", cid),
               "text": (e.campaign.clue(cid) or {}).get("reveals", "")} for cid in s.discovered_clues]
+    said = " ".join(m["content"] for m in s.messages_archive + s.messages if m["role"] == "keeper")
+    npcs = [{"name": n.get("name"), "role": n.get("role", "")} for n in e.campaign.data.get("npcs") or []
+            if n.get("name") and (n["name"] in said or n["name"].split()[-1] in said)]
     return {
         "state": asdict(s),
+        "npcs": npcs,
         "title": e.campaign.title,
         "campaign": Path(s.campaign_file).stem,
         "scene_name": scene.get("name", "?"),

@@ -29,6 +29,8 @@ export type Ctx = {
   setError: (e: string) => void
   draft: string
   setDraft: (s: string) => void
+  recap: boolean
+  setRecap: (v: boolean) => void
   go: (s: Screen) => void
   openSettings: () => void
   /** Open the dice table for the pending roll, or for pushing a failed one (with the player's reason). */
@@ -64,6 +66,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("title")
   const [settings, setSettings] = useState(false)
   const [draft, setDraft] = useState("")
+  const [recap, setRecap] = useState(false)
   const [lastMinigame, setLastMinigame] = useState<FinishedMinigame | null>(null)
   const [table, setTable] = useState<(TableProps & { id: number }) | null>(null)
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: string }[]>([])
@@ -188,7 +191,7 @@ export default function App() {
 
   pickLang(game?.state.language, screen === "title" ? undefined : game?.title)
   const ctx: Ctx = {
-    meta, game, busy, partial, call, turn, refreshMeta, setError, draft, setDraft, go: setScreen,
+    meta, game, busy, partial, call, turn, refreshMeta, setError, draft, setDraft, recap, setRecap, go: setScreen,
     openSettings: () => setSettings(true), rollPending, freeRoll,
   }
   const active = game && (game.state.characters.find((c) => c.id === game.state.active_character_id)

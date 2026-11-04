@@ -28,7 +28,7 @@ const ZH: Record<string, string> = {
   "Find a skill…": "搜尋技能……", "Click a skill to try it. The Keeper decides if it needs a roll.": "點擊技能嘗試運用。由守秘人決定是否需要擲骰。",
   "Use": "使用", "Inspect": "查看", "Drop": "丟棄", "Give to": "交給", "Click an item to look at it.": "點擊物品查看。",
   "Nothing carried.": "身上沒有物品。", "You haven't looked at it closely.": "你還未仔細查看。", "Turning it over in your hands…": "你把它拿在手中細看……",
-  "Clues": "線索", "Places": "地點", "Nothing found yet.": "暫時未有發現。", "The story so far": "前情提要",
+  "Clues": "線索", "Places": "地點", "People": "人物", "Nothing found yet.": "暫時未有發現。", "The story so far": "前情提要",
   // dice
   "Press and hold to grab the dice, then flick and let go": "按住骰子，甩動後放手", "Just throw": "直接擲骰", "Back": "返回",
   "Let go to throw!": "放手擲骰！", "Click to continue": "點擊繼續", "Held firm": "穩住了", "Shaken": "動搖了",

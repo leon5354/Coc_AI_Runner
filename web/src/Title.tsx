@@ -27,6 +27,7 @@ export default function Title({ ctx }: { ctx: Ctx }) {
       const g = await api.send<Game>("/api/game/start", { file: chosen.file, restart })
       await ctx.call(async () => g)
       await ctx.refreshMeta()
+      ctx.setRecap(g.state.turn_count > 0)      // coming back to a game in progress
       ctx.go("play")
     } catch (e) { ctx.setError((e as Error).message) }
   }

@@ -1,17 +1,21 @@
 // The game screen: story on the left, the scene's art on the right, party down the side.
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { t } from "./i18n"
 import Markdown from "react-markdown"
 import * as api from "./api"
 import type { Character, Game, Message } from "./api"
 import type { Ctx, FinishedMinigame } from "./App"
+import { AmbienceButton } from "./Atmosphere"
+import { readSky, sceneWeather } from "./art/kits"
 import { mindOf, Portrait } from "./art/Portrait"
 import type { DieSpec } from "./dice/table"
 import { FrozenMinigame, Minigame } from "./minigames"
 import Panel, { Bar } from "./Panel"
 import { brainName } from "./Title"
 
-function Line({ m, chars }: { m: Message; chars: Character[] }) {
+const named = (text: string, name: string) => text.includes(name) || text.includes(name.split(" ").pop() ?? name)
+
+function Line({ m, chars, npcs }: { m: Message; chars: Character[]; npcs: Game["npcs"] }) {
   const c = m.content
   if (m.role === "player" && c.startsWith("ROLL RESULT:")) return null   // legacy saves
   if (m.role === "dice") return <div className="msg dice"><span className="die-mark">🎲</span><b>{c}</b></div>
@@ -25,7 +29,13 @@ function Line({ m, chars }: { m: Message; chars: Character[] }) {
   return (
     <div className={`msg ${m.role}`}>
       {ch && <Portrait name={ch.name} about={`${ch.personality} ${ch.backstory}`} size={38} ratio={mindOf(ch)} />}
-      <div>{m.name && <div className="who">{m.name}</div>}<Markdown>{c}</Markdown></div>
+      <div>
+        {m.name && <div className="who">{m.name}</div>}
+        <Markdown>{c}</Markdown>
+        {m.role === "keeper" && npcs.filter((n) => named(c, n.name)).map((n) => (
+          <span className="npc-chip" key={n.name} title={n.role}><Portrait name={n.name} about={n.role} size={26} />{n.name}</span>
+        ))}
+      </div>
     </div>
   )
 }
@@ -222,6 +232,10 @@ export default function Play({ ctx, lastMinigame, onMinigameDone }: {
     return () => clearTimeout(t)
   }, [game?.state.scene_id])
 
+  const told = game?.state.messages.findLast((m) => m.role === "keeper")?.content ?? ""
+  const base = useMemo(() => (game ? sceneWeather(game.scene_name, game.scene_text, game.scene_art) : "fog"), [game?.state.scene_id])
+  const fx = readSky(told).weather || base
+
   if (!game) return <div className="info"><button onClick={() => ctx.go("title")}>{t("Pick a campaign")}</button></div>
   const st = game.state
   const chars = st.characters
@@ -233,6 +247,7 @@ export default function Play({ ctx, lastMinigame, onMinigameDone }: {
         <button onClick={() => ctx.go("title")} title={t("Back to the title")}>☰</button>
         <div className="grow topbar-title"><b>{game.title}</b><span>{game.scene_name} · {t("turn {n}", { n: st.turn_count })}</span></div>
         <div className="topbar-tools">
+          <AmbienceButton mood={game.mood} stress={lead.stress / Math.max(lead.max_stress, 1)} diceNonce={st.dice_log.length} fx={fx} />
           <button disabled={!game.can_undo || !!ctx.busy} title={t("Rewind the last turn")} onClick={() => ctx.call(() => api.send("/api/game/undo"))}>↩</button>
           <button onClick={() => setTray(!tray)} title={t("Roll any dice")}>🎲</button>
           <button onClick={() => setPanel({ who: lead.id, tab: "items" })} title={t("狀態欄 / 物品欄 — status and items")}>🎒</button>
@@ -246,7 +261,7 @@ export default function Play({ ctx, lastMinigame, onMinigameDone }: {
         <PartyRail game={game} open={(who, tab) => setPanel({ who, tab })} />
         <section className="story">
           <div className="transcript">
-            {[...st.messages_archive, ...st.messages].map((m, i) => <Line key={i} m={m} chars={chars} />)}
+            {[...st.messages_archive, ...st.messages].map((m, i) => <Line key={i} m={m} chars={chars} npcs={game.npcs} />)}
             {ctx.partial && <div className="msg keeper"><div><Markdown>{ctx.partial}</Markdown></div></div>}
             {ctx.busy && !ctx.partial && <div className="thinking"><span className="spinner" /> {ctx.busy}</div>}
             <div ref={end} />
@@ -268,7 +283,18 @@ export default function Play({ ctx, lastMinigame, onMinigameDone }: {
         </section>
       </div>
 
-      {card && <div className="scene-card" key={card}><span>{card}</span></div>}
+      {card && !ctx.recap && <div className="scene-card" key={card}><span>{card}</span></div>}
+      {ctx.recap && (
+        <div className="modal-back" onClick={() => ctx.setRecap(false)}>
+          <div className="modal recap">
+            <h2>{t("The story so far")}</h2>
+            <p className="muted">{game.scene_name} · {t("turn {n}", { n: st.turn_count })}</p>
+            {st.summary ? <Markdown>{st.summary}</Markdown>
+              : st.messages.filter((m) => m.role === "keeper").slice(-2).map((m, i) => <Markdown key={i}>{m.content}</Markdown>)}
+            <button className="primary" onClick={() => ctx.setRecap(false)}>{t("Continue")}</button>
+          </div>
+        </div>
+      )}
       {st.ending && !ctx.busy && <Ending ctx={ctx} game={game} />}
       {panel && <Panel ctx={ctx} game={game} who={panel.who} tab={panel.tab} onClose={() => setPanel(null)} />}
     </div>

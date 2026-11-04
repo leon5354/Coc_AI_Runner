@@ -739,6 +739,13 @@ export function chooseKit(name: string, text: string, art?: string) {
   return best
 }
 
+/** The weather a scene settles into, for the sound. */
+export function sceneWeather(name: string, text: string, art?: string) {
+  const sky = readSky(`${name} ${text}`).weather
+  const kit = chooseKit(name, text, art)
+  return sky || (kit ? KITS[kit].paint(rng(1), name + text).fx : "fog")
+}
+
 export function paintScene(name: string, text: string, art?: string): Art {
   const kit = chooseKit(name, text, art)
   const r = rng(hash(name + text))

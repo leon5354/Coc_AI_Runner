@@ -193,6 +193,14 @@ function Journal({ game }: { game: Game }) {
       {game.clues.map((c) => (
         <details key={c.id}><summary>🔎 {c.name}</summary><p>{c.text}</p></details>
       ))}
+      {game.npcs.length > 0 && <>
+        <h4>{t("People")}</h4>
+        <div className="people">
+          {game.npcs.map((n) => (
+            <div key={n.name} title={n.role}><Portrait name={n.name} about={n.role} size={54} /><b>{n.name}</b><span>{n.role}</span></div>
+          ))}
+        </div>
+      </>}
       <h4>{t("Places")}</h4>
       <SceneMap game={game} />
       {game.state.summary && <><h4>{t("The story so far")}</h4><Markdown>{game.state.summary}</Markdown></>}
