@@ -74,7 +74,7 @@ function Composer({ ctx, game }: { ctx: Ctx; game: Game }) {
     ctx.setDraft("")
     if (mode === "act") await ctx.turn("/api/game/act", { character_id: who.id, text: t })
     else if (mode === "talk") await ctx.turn("/api/game/talk", { character_id: who.id, text: t })
-    else await ctx.call(() => api.send<Game>("/api/game/ooc", { question: t }))
+    else await ctx.call(() => api.send<Game>("/api/game/ooc", { question: t }), "The Keeper leans back…")
   }
 
   const placeholder = { act: `What does ${who.name} do?`, talk: `What does ${who.name} say? No turn spent.`, ooc: "Ask anything: rules, a recap, your options…" }[mode]
@@ -84,7 +84,7 @@ function Composer({ ctx, game }: { ctx: Ctx; game: Game }) {
       {research.open && (
         <form className="row" onSubmit={(e) => {
           e.preventDefault()
-          if (research.q.trim()) ctx.call(() => api.send<Game>("/api/game/research", { query: research.q.trim(), web: research.web }))
+          if (research.q.trim()) ctx.call(() => api.send<Game>("/api/game/research", { query: research.q.trim(), web: research.web }), "Dust rises from old shelves…")
           setResearch({ open: false, q: "", web: false })
         }}>
           <input className="grow" autoFocus value={research.q} placeholder="Look something up in the archives…" onChange={(e) => setResearch({ ...research, q: e.target.value })} />

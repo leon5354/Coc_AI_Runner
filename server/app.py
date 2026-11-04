@@ -24,6 +24,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -41,6 +42,8 @@ from core.llm_client import (CLAUDE_MODELS, MAIN_MODELS, PROVIDERS, UTIL_MODELS,
                              ollama_base)
 
 app = FastAPI(title="AI TTRPG Runner")
+# Local tool with no login: refuse requests that reach us under any other name (DNS rebinding).
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
 AUDIO = ROOT / "data" / "audio"   # optional BGM: drop .mp3/.ogg/.wav files here
 
 # ponytail: one game per server process (local play). Rooms/sessions arrive with online multiplayer.

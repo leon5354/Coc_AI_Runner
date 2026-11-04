@@ -69,6 +69,11 @@ class Resp:
 with mock.patch("core.llm_client.requests.post", return_value=Resp()):
     assert "".join(o.stream([{"role": "user", "content": "x"}])).startswith("The door.")
 
+# no form of control block ever shows while the Keeper types
+from core.keeper import _HIDE_RE  # noqa: E402
+for raw in ['The door.\n{"hp_change": null', 'The door.\n{', 'The door.\n{"ro', 'The door.\n```json\n{']:
+    assert _HIDE_RE.split(raw, 1)[0].strip() == "The door.", raw
+
 # the page never sees the control block while the Keeper types
 camp = SimpleNamespace(title="T", plot_outline="", endings=[], data={}, rule_system="coc7e", scene=lambda i: {}, clue=lambda i: None)
 with mock.patch("core.llm_client.requests.post", return_value=Resp()), \

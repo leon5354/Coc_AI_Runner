@@ -22,9 +22,12 @@ export default function Title({ ctx }: { ctx: Ctx }) {
   async function start(restart: boolean) {
     if (noBrain) { ctx.openSettings(); return }
     if (restart && chosen.has_save && !confirm(`Start "${chosen.title}" over? This deletes its save.`)) return
-    await ctx.call(() => api.send<Game>("/api/game/start", { file: chosen.file, restart }))
-    await ctx.refreshMeta()
-    ctx.go("play")
+    try {
+      const g = await api.send<Game>("/api/game/start", { file: chosen.file, restart })
+      await ctx.call(async () => g)
+      await ctx.refreshMeta()
+      ctx.go("play")
+    } catch (e) { ctx.setError((e as Error).message) }
   }
 
   if (!chosen) return <div className="boot">No valid campaigns in data/campaigns/</div>

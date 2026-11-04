@@ -290,7 +290,8 @@ as a friendly game master at the table would.
 - No JSON block. Just talk to them."""
 
 
-_HIDE_RE = re.compile(r"```|\{\s*\"roll_request|\{\s*$")   # where the control block starts
+# where the control block starts, even if the model forgets the fence or changes the key order
+_HIDE_RE = re.compile(r'```|\{\s*"?[a-z_]*"?\s*:?\s*$|\{\s*"(?:' + "|".join(sorted(CONTROL_KEYS)) + r')"')
 _FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 

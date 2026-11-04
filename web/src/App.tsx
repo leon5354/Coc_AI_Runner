@@ -21,7 +21,7 @@ export type Ctx = {
   busy: string                                   // label of the beat in flight, "" when idle
   partial: string                                // the Keeper's words so far, while they arrive
   /** Quick action that returns the new game view. */
-  call: (fn: () => Promise<Game | null>) => Promise<void>
+  call: (fn: () => Promise<Game | null>, label?: string) => Promise<void>
   /** Streamed turn: one beat per line. */
   turn: (path: string, body?: unknown) => Promise<void>
   refreshMeta: () => Promise<void>
@@ -86,9 +86,10 @@ export default function App() {
     api.get<Game | null>("/api/game").then((g) => { if (g) { setGame(g); setScreen("play") } }).catch(() => {})
   }, [])
 
-  async function call(fn: () => Promise<Game | null>) {
+  async function call(fn: () => Promise<Game | null>, label = "") {
     setError("")
-    try { setGame(await fn()) } catch (e) { setError((e as Error).message) }
+    if (label) setBusy(label)
+    try { setGame(await fn()) } catch (e) { setError((e as Error).message) } finally { if (label) setBusy("") }
   }
 
   /** Show one roll on the table and wait for it to land. */

@@ -118,6 +118,9 @@ assert c.post("/api/game/free_roll", json={"expr": "banana"}).status_code == 400
 g = c.get("/api/game").json()
 assert g["map"] and g["clues_total"] > 0 and g["stress_name"] == "Sanity" and g["rule_label"]
 
+# only this computer may talk to the server, whatever a website's DNS claims
+assert c.get("/api/meta", headers={"host": "evil.example"}).status_code == 400
+
 # brains: options never crash; Hugging Face links become Ollama names
 assert set(c.get("/api/llm/options").json()) >= {"ollama", "gpu", "claude", "keys"}
 from server.app import _hf_name  # noqa: E402
