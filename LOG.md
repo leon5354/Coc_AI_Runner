@@ -204,3 +204,16 @@ sequencing confirmed in-browser: Keeper reply on screen while the companion was 
   and mouse moves added extra heat. Web version is truly time-based with 3x rates (same feel).
 - Verified in-browser (mock): start, act, roll gate + dice, undo, all 9 minigames incl.
   candle heat and memory-echo playback, talk, ask-the-keeper, settings, phone layout.
+
+**Playable product pass (2026-11-04):**
+- Rule audit against the rulebooks found the real bugs listed in CHANGELOG. `test_mechanics.py`
+  compares odds with exact maths, including bonus dice counted by enumeration.
+- Dice: pre-simulate, then reprint faces, then replay. 140/140 throws across all 7 die types
+  landed on the requested value (checked in-browser with `readTops`).
+- Local AI gotchas: Ollama's OpenAI endpoint can't set `num_ctx`, so a 4k context silently
+  truncates the Keeper prompt; use `/api/chat`. Qwen3 GGUFs ignore `think:false`, so add
+  `/no_think`. Models invent clues instead of awarding scripted ones, hence dice-driven clues.
+- A hidden Browser pane pauses requestAnimationFrame and CSS animations, so art looks black and
+  dice "hang" there. It's the pane, not the app. Test with the pane visible, or use `instant`.
+- Streamlit removed; keeping it alive would have blocked engine changes.
+

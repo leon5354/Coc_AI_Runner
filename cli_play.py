@@ -49,6 +49,24 @@ class MockLLM:
         'Somewhere above you, a floorboard creaks — slowly, deliberately.\n\n'
         '```json\n{"roll_request": null, "stress_check": null, "hp_change": null,'
         ' "clues_discovered": [], "scene_transition": null, "characters_act": []}\n```',
+        # 7: an item and a wound
+        'A loose board gives way. Your hand closes on cold iron as something rakes your wrist from below.\n\n'
+        '```json\n{"roll_request": null, "stress_check": null, "hp_change": {"character": "", "amount": "-1d3"},'
+        ' "inventory_change": {"character": "", "add": ["Rusty iron key"], "remove": []},'
+        ' "clues_discovered": [], "scene_transition": null, "characters_act": []}\n```',
+        # 8: a companion rolls on their own
+        'Professor Vale crouches over the symbols, muttering. Can he read them in time?\n\n'
+        '```json\n{"roll_request": {"character": "prof_warren_vale", "skill": "Occult", "difficulty": "regular",'
+        ' "reason": "reading the symbols"}, "stress_check": null, "hp_change": null,'
+        ' "clues_discovered": [], "scene_transition": null, "characters_act": []}\n```',
+        # 9: outcome of the companion roll
+        'He looks up, pale. "It is a binding. And it has already broken."\n\n'
+        '```json\n{"roll_request": null, "stress_check": null, "hp_change": null,'
+        ' "clues_discovered": [], "scene_transition": null, "characters_act": []}\n```',
+        # 10: the end
+        'Fire takes the old timbers. By dawn the house on Marsh Lane is ash, and the counting has stopped.\n\n'
+        '```json\n{"roll_request": null, "stress_check": null, "hp_change": null, "ending": "destroyed",'
+        ' "clues_discovered": [], "scene_transition": null, "characters_act": []}\n```',
     ]
 
     def chat(self, messages, system_prompt=None, **kw):

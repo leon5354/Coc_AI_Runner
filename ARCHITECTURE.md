@@ -9,7 +9,6 @@ Supported rule systems: CoC 7e, D&D 5e, Warhammer Fantasy RP, basic d100 (see `r
 
 ```
 Web UI (web/src, React)  →  POST /api/game/act  →  server/app.py
-  (legacy: Streamlit UI interface/app.py calls the engine directly)
   → Engine.begin_action + keeper_steps(text)     core/engine.py
       → Keeper.respond(state, text)              core/keeper.py
           builds: system prompt (role + rules + language + god mode + campaign brief)
@@ -44,43 +43,46 @@ they never spend a turn, roll dice, or change scene/plot state.
 | `core/game_state.py` | All runtime state | `GameState`/`CharacterState` dataclasses; JSON save per campaign; `pending_roll`/`pending_minigame` survive reload; `CharacterState.memory_summary`/`relationships`/`private_thoughts` (per-character memory); `GameState.companion_style` (player/cinematic); `slugify()` keeps unicode, `unique_id()` guarantees no id collisions |
 | `core/campaign.py` | Schema v2 load + validate | `validate()` returns ALL problems; optional fields: `tone`, `npcs`, `escalation`, `canon`, scene `keeper_notes`/`mood`; `Campaign.protagonist` property (setting-appropriate player character, falls back to `data/agents/protagonist.yaml` when absent) |
 | `core/memory.py` | Rolling summary + character memory | story summary: compact >30 msgs, per-character arc lines, hard facts live in state block not summary; `compact_character()`: folds an AI character's overflowing `private_thoughts` into first-person `memory_summary` + `relationships`, using the cheap `util_llm` |
-| `core/minigames_catalog.py` | Minigame source of truth | type → label, per-setting fit (`"*"` or setting keys), keeper contract text; `keeper.py` and `interface/minigames.py` both derive from it — `test_minigame_catalog.py` enforces parity |
-| `core/llm_client.py` | Provider abstraction | `chat(messages, system_prompt)`; openrouter/google/ollama; call log → `data/logs/llm.log` |
+| `core/minigames_catalog.py` | Minigame source of truth | type → label, per-setting fit (`"*"` or setting keys), keeper contract text; `keeper.py` derives from it and `web/src/minigames.tsx` must match — `test_minigame_catalog.py` enforces parity |
+| `core/llm_client.py` | Provider abstraction | `chat()` and `stream()`; ollama (native API, sets `num_ctx`), claude_cli (headless `claude -p`, plan login, no tools), openrouter, google. Failures raise `LLMError` through `check_llm`, so they never enter the story. Call log → `data/logs/llm.log` |
 | `rules/` | Pluggable rule systems | `RuleSystem` ABC; registry in `__init__`; `coc7e`/`wfrp` (`has_stress=True`) + `dnd5e`/`basic_d100` (`has_stress=False`). `skill_value` semantics are per-system (0-100 for d100 systems, d20 modifier for dnd5e) — a campaign's sheets must match its `rule_system` |
 | `agents/lore.py` | Real-setting canon fetch | `SETTING_WIKIS` (MediaWiki api.php per IP: Cthulhu Mythos, Forgotten Realms, Warhammer Fantasy, Warhammer 40k); `fetch_canon(setting, concept, llm)` at GENERATION only, baked into campaign `canon:`; extracts→parse-HTML fallback; degrades to "" on any failure. Trademarked settings: personal/hobby use only |
 | `agents/player_agent.py` | AI party members | THOUGHT/ACTION (or THOUGHT/SAY in talk mode) output; `PlayerAgent.take_turn(char, state, campaign, mode)`; prompt built from the character's `memory_summary` + `relationships` + recent `private_thoughts`, not just their static sheet; register controlled by `state.companion_style` (player = table voice, no self-narration of involuntary detail or others' reactions; cinematic = richer prose) |
 | `agents/researcher.py` | Diegetic lore handouts | uses `util_llm`; optional DDG web flavor |
 | `agents/scripter.py` | Campaign generator | schema v2 JSON via json_mode; validate + one repair round-trip; generates a setting-appropriate `protagonist` block (not just `ai_party`) with stats matching the rule system's conventions; optional lore fetch via `agents/lore.py` baked into `canon:` |
-| `server/app.py` | FastAPI web API | One `ENGINE` per process + `BUSY` lock (409 while a turn runs). Turn endpoints (`act/talk/roll/negotiate/minigame`) stream NDJSON: `{label, game}` per beat, then `{done, game}` (or `{done, error, game}`); `roll`'s first line carries `dice`. `game_view()` = `asdict(state)` + title/scene/mood/dice_spec/can_undo. `MOCK_LLM=1` → scripted keeper and saves under `data/saves/mock/`. Serves `web/dist` at `/` and `data/audio` at `/api/audio`. `python -m server [--mock]` runs it (localhost only) |
+| `server/app.py` | FastAPI web API | One `ENGINE` per process + `BUSY` lock (409 while a turn runs). Turn endpoints (`act/talk/roll/negotiate/minigame`) stream NDJSON: `{partial}` while the Keeper types, `{label, game, dice}` per beat, then `{done, game, dice}` (or with `error`). `dice` = rolls to show. `game_view()` = `asdict(state)` + scene, mood, roll preview, clues, map, can_undo. `/api/llm/*` lists what this PC can run, adds/removes Ollama models, signs in to OpenRouter. `MOCK_LLM=1` → scripted keeper and saves under `data/saves/mock/`. Serves `web/dist` at `/` and `data/audio` at `/api/audio`. `python -m server [--mock]` runs it (localhost only) |
 | `web/src/` | React frontend | `api.ts` (types mirror `game_state.py`, NDJSON reader), `App.tsx` (state + `turn()`/`call()`), `Play.tsx`, `Sidebar.tsx`, `Dice.tsx`, `Atmosphere.tsx`, `minigames.tsx` (`GAMES` registry), `Architect.tsx`. Markdown via react-markdown (no raw HTML — LLM text is untrusted) |
-| `interface/app.py` | Streamlit shell (legacy) | thin; all logic in engine; `MOCK_LLM=1` env = offline scripted keeper; `advance_turn()` drives `engine.keeper_steps()` one beat per rerun; mode switch for Act/Talk/Ask-the-Keeper |
-| `interface/dice.py` | 3D dice (CCv2) | cosmetic; server rolls first |
-| `interface/minigames.py` | Keeper-invokable minigames | `RENDERERS` dict (must match `minigames_catalog` exactly); skins (parchment/modern/stone/chalk); `render_frozen` freeze-frame |
-| `interface/atmosphere.py` | Mood backgrounds + sound | scene `mood:` (daylight/dusk/night/unearthly, fallback = scene position); sanity vignette; WebAudio drone/heartbeat/dice-clatter (no assets); BGM from `data/audio/` |
-| `interface/architect.py` | Scenario Architect tab | rule system + setting/IP picker (drives `agents/lore.py`); minigame coverage-by-setting table generated from `minigames_catalog` |
-| `cli_play.py` | Terminal REPL + `MockLLM` | scripted responses exercising every control path |
+| `web/src/dice/` | 3D dice | `shapes.ts` builds every die from its convex hull. `table.ts`: on a throw, the whole physics run is simulated first (retrying if a die lands cocked), the die is reprinted so the landing face shows the server's number, then the recording plays back. `DiceTable.tsx` is the full-screen moment. The server always rolls; `readTops()` lets tests prove the die agrees |
+| `web/src/art/` | Art made by code | `kits.ts`: one painter per kind of place, picked from the scene's `art:` field or its words (EN + ZH). `SceneArt.tsx`: WebGL sky/fog, SVG silhouettes with parallax, canvas weather. `Portrait.tsx`: rim-lit silhouettes from the character sheet. `itemIcon.tsx`: icon from the item's name |
+| `playtest.py` | Real-AI playtest | Another AI plays the human; writes a report to `data/logs/` |
+| `cli_play.py` | Terminal REPL + `MockLLM` | scripted responses exercising every control path, through to an ending |
 
 ## Contracts to keep in sync
 
 1. **Keeper output contract** (`keeper.py OUTPUT_CONTRACT`) ⟷ `Control` fields ⟷ `engine._apply_effects`.
 2. **Minigame types**: `core/minigames_catalog.py` is the single source of truth (type, label,
    per-setting fit, keeper contract text). `keeper.MINIGAME_TYPES` and the prompt's minigame
-   section derive from it (filtered by the campaign's setting); `interface/minigames.RENDERERS`
-   and `web/src/minigames.tsx` `GAMES` must each cover exactly the catalog —
+   section derive from it (filtered by the campaign's setting); `web/src/minigames.tsx` `GAMES`
+   must cover exactly the catalog —
    `test_minigame_catalog.py` enforces parity. To add a minigame: 1 catalog entry + 1 web
-   game (+ 1 Streamlit renderer while that UI lives).
+   game, done.
 3. **Campaign schema**: `campaign.validate` ⟷ `scripter.ARCHITECT_INSTRUCTION_TEMPLATE` ⟷ sample `the_haunting.yaml`.
 4. **Save format**: `GameState`/`CharacterState` fields — add with defaults only (old saves must
    keep loading). New character ids must go through `unique_id()`, never assigned directly.
 5. **Live turn loop**: `engine.keeper_steps()` yields ⟷ `server.stream_turn()` sends one NDJSON
-   line per beat (and `app.advance_turn()` runs one beat per rerun in Streamlit). Any new LLM work inside a turn must `yield` a label, or it will block the UI.
+   line per beat. Any new LLM work inside a turn must `yield` a label, or it will block the UI.
    Message roles the transcript renders: `keeper`, `player`, `companion`, `dice`, `researcher`,
    `ooc`.
 6. **Character authority**: `keeper.character_authority_clause(state)` ⟷ `state.companion_style`
    ⟷ `state.party_mode`. If you add a new way for an AI character to act autonomously, it must
    also be covered by this clause or the Keeper will speak for it. `test_authority.py` covers
    the mode matrix.
-7. **Protagonist**: `Campaign.protagonist` ⟷ `scripter.ARCHITECT_INSTRUCTION_TEMPLATE`'s
+7. **Dice events**: every roll the player should see goes through `engine.events`
+   (`_record_roll`, stress checks) and is drained per beat by the server. `RollResult.dice` lists
+   the physical dice; kept dice must add back up to the roll. `test_mechanics.py` enforces it.
+8. **Clues**: a successful roll with a scene clue's skill finds that clue (`_outcome_prompt`). The
+   Keeper can also award clues through `clues_discovered`.
+9. **Protagonist**: `Campaign.protagonist` ⟷ `scripter.ARCHITECT_INSTRUCTION_TEMPLATE`'s
    `protagonist` block ⟷ `engine.new_game()`'s fallback to `data/agents/protagonist.yaml`. A
    campaign without a protagonist block must still produce a playable (generic) character.
 
@@ -89,7 +91,8 @@ they never spend a turn, roll dice, or change scene/plot state.
 ```
 test_rules.py test_keeper_parser.py test_engine.py test_party_modes.py test_memory.py
 test_scripter.py test_memory_character.py test_id_collision.py test_new_systems.py
-test_minigame_catalog.py test_authority.py test_protagonist.py test_server.py
+test_minigame_catalog.py test_authority.py test_protagonist.py test_server.py test_mechanics.py
+test_live_turn.py test_roll_chain.py        (python test_all.py runs them all)
 ```
 
 `python -m core.campaign <file>` validates a campaign file; `python cli_play.py --mock` plays
@@ -97,5 +100,6 @@ a full session offline against a scripted Keeper.
 
 ## Env
 
+`data/settings.json` (the brain picked in the app) wins over `.env`.
 `.env`: `LLM_PROVIDER/LLM_MODEL` (main), `UTILITY_PROVIDER/UTILITY_MODEL` (cheap tasks),
 `OPENROUTER_API_KEY`/`GOOGLE_API_KEY`, `MOCK_LLM=1` (offline), `SCRIPTER_PROVIDER/SCRIPTER_MODEL`.

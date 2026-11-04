@@ -71,6 +71,8 @@ def make_llms():
         m = MockLLM()
         return m, m
     from core.llm_client import LLMClient
+    if not LLM_CFG["model"]:
+        raise ValueError("no model picked yet")
     main = LLMClient(provider=LLM_CFG["provider"], model_name=LLM_CFG["model"])
     util = (LLMClient(provider=LLM_CFG["util_provider"], model_name=LLM_CFG["util_model"])
             if LLM_CFG["util_model"] else None)

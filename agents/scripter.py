@@ -82,6 +82,7 @@ Return ONLY valid JSON matching exactly:
       "description": "String (detailed sensory info for the keeper)",
       "keeper_notes": "String (private GM advice: pacing, antagonist activity, stall/loud contingencies, critical clue)",
       "mood": "daylight|dusk|night|unearthly (visual/audio atmosphere of the scene; escalate with the horror)",
+      "art": "office|library|asylum|hall|attic|cellar|living|bedroom|elevator|abyss|forest|lab|chapel|garden|wreck|street (the closest picture for this place)",
       "clues": [
         {{"id": "snake_case_id", "description": "String (what draws attention)",
           "skill": "String (skill name)", "difficulty": "regular",

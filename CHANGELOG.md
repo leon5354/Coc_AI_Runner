@@ -7,8 +7,28 @@
   beat-by-beat turns, roll gate + negotiation, all 9 minigames, dice, mood backgrounds, sanity
   vignette, ambience, party/inner-life/character editing, minigame tester, undo, export, and
   the Scenario Architect. Works on phones.
-- `run_web.bat` / `python -m server [--mock]`: one command to set up, build, and open it.
 - `test_server.py`: a full mock session over HTTP, offline.
+- **3D dice**: real physics, grab and flick. d4 to d100, bonus dice shown, companion and sanity
+  rolls shown too, loose dice tray. The server's number always lands face up.
+- **Art made by code**: 16 kinds of place with sky, fog, parallax, weather and light. Portraits.
+  No image files and no image AI.
+- **Character panel (狀態欄 / 物品欄)**: status, skills, inventory with icons, journal with clues
+  and a map that fills in. Items can be inspected, used, given and dropped.
+- **Title screen, ending screen, scene title cards, pop-ups** for HP, sanity, items and clues.
+- **No-key brains**: Ollama with add/remove from Hugging Face links, Claude plan through the
+  `claude` command, OpenRouter sign-in. The choice is remembered.
+- **Live typing**: the Keeper's words appear as they are written.
+- **Keeper tools**: items, endings, bonus/penalty dice, damage as dice ("-1d6").
+- **`test_mechanics.py`, `test_all.py`, `playtest.py`, GOAL.md**.
+### Fixed
+- Bonus/penalty dice and advantage were never applied to any roll.
+- CoC: 00 + 0 ignored bonus/penalty dice. WFRP: no automatic 01-05 / 96-100, wrong Success Levels.
+- Damage written as "-1d6" was silently dropped. Healing never woke an unconscious hero.
+- AI failures were written into the story as narration.
+- Ollama cut off the Keeper's prompt (context 4096) and thinking models returned empty text.
+- A success now finds the scene's real clue, so models can't skip the campaign's clues.
+### Removed
+- The Streamlit UI. The web app replaced all of it.
 ### Changed
 - Mock mode saves to `data/saves/mock/` so test games never overwrite real saves.
 - Restart asks before deleting a save.

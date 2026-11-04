@@ -94,34 +94,42 @@ Adding a system is one file in `rules/` implementing the `RuleSystem` interface 
 
 ## Quick start
 
-Needs Python 3.10+ and [Node.js](https://nodejs.org) (to build the web page).
+Needs Python 3.10+ and [Node.js](https://nodejs.org). Double-click `run_web.bat`, or:
 
 ```bash
-copy .env.example .env    # then fill in your provider + API key
-run_web.bat               # sets up everything, builds the web app, opens your browser
+run_web.bat
 ```
 
-No API key? `run_web.bat --mock` plays a short scripted demo offline. Mock games save to
-`data/saves/mock/`, so they never touch your real saves.
+It sets everything up, builds the page and opens your browser. Saves are automatic.
 
-By hand:
+Try it with no AI at all: `run_web.bat --mock` plays a scripted demo from start to ending.
+Demo games save to `data/saves/mock/`, so they never touch your real saves.
+
+### Picking a brain (no API key needed)
+
+Open **Settings** in the app. Your choice is remembered in `data/settings.json`.
+
+| Brain | Cost | What you need |
+|---|---|---|
+| **This PC** | Free, private | [Ollama](https://ollama.com) and a model. Paste a Hugging Face GGUF link in Settings to add one; remove them there too. |
+| **Claude plan** | Your subscription limits | Claude Code, logged in once with `claude auth login`. For your own use on your own machine. |
+| **Online API** | Pay per use | An OpenRouter or Google key, or Sign in with OpenRouter. Sign-in only saves pasting a key: it still spends your credits. |
+
+Pick a model smaller than your GPU memory. `OLLAMA_NUM_CTX` (default 16384) sets how much the
+model can read at once. Ollama's own default of 4096 would cut off the Keeper's instructions.
+
+### Working on it
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-cd web && npm install && npm run build && cd ..
-python -m server          # http://127.0.0.1:8000  (add --mock for offline)
+python -m server --no-browser
 ```
 
-Working on the frontend? Run `python -m server --no-browser` and, in a second terminal,
-`cd web && npm run dev` — open http://localhost:5173 and edits show up instantly.
+```bash
+cd web && npm run dev
+```
 
-Pick a campaign in the sidebar and press **Start**. Saves are automatic
-(`data/saves/<campaign>.save.json`) and survive restarts — even mid-roll.
-
-The old Streamlit UI still works while the web app takes over (`run_app.bat`, or
-`streamlit run interface/app.py`). The terminal client: `python cli_play.py --mock`.
+Open http://localhost:5173 and edits show up instantly. `/?art=cellar&mood=night` previews one
+art kit on its own. The terminal client still works: `python cli_play.py --mock`.
 
 ## Architecture
 
@@ -138,8 +146,9 @@ core/
   llm_client.py         provider abstraction (google / openrouter / ollama)
 agents/       player_agent (AI companions), researcher, scripter, lore (real-setting canon)
 server/       app.py — FastAPI web API over the engine; turns stream beat by beat (NDJSON)
-web/          React + TypeScript frontend (Vite): play screen, dice, minigames, architect
-interface/    legacy Streamlit UI: app.py, dice.py, minigames.py, atmosphere.py, architect.py
+web/          React + TypeScript frontend (Vite)
+  src/dice/   3D dice: three.js + cannon-es physics
+  src/art/    scene art kits, sky shader, weather, portraits, item icons
 cli_play.py   terminal REPL (dev harness)
 ```
 
@@ -152,23 +161,23 @@ Campaigns are YAML files in `data/campaigns/` — see `the_haunting.yaml` for th
 
 ## Tests
 
-All offline, no API key needed:
+```bash
+python test_all.py
+```
+
+Everything offline, no API key. `test_mechanics.py` checks every rule against exact rulebook
+odds over thousands of rolls, then drives each effect through real Keeper turns.
+
+Real-AI playtest, with one AI playing the human and another as Keeper:
 
 ```bash
-python test_rules.py
-python test_keeper_parser.py
-python test_engine.py
-python test_party_modes.py
-python test_memory.py
-python test_scripter.py
-python test_memory_character.py
-python test_id_collision.py
-python test_new_systems.py
-python test_minigame_catalog.py
-python test_authority.py
-python test_protagonist.py
-python test_server.py
+python playtest.py data/campaigns/the_haunting.yaml --turns 6 --model <ollama model>
 ```
 
 `python -m core.campaign <file>` validates a campaign file; `python cli_play.py --mock` plays
 a full session offline against a scripted Keeper.
+
+## Credits
+
+Item icons by the [game-icons.net](https://game-icons.net) authors, CC BY 3.0, via `react-icons`.
+All scene art, portraits and dice are drawn by code in this repo: no image files, no image AI.
