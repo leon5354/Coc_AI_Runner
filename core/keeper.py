@@ -356,6 +356,19 @@ def parse_response(text: str):
     return narrative, ctrl
 
 
+REFEREE_PROMPT = """You are the rules referee of a tabletop game. You never tell the story.
+Read what the player just did and answer with JSON only:
+{"roll": "<skill from the list, or null>", "difficulty": "<level>", "bonus": 0, "penalty": 0, "move_to": "<exit id, or null>"}
+Call a roll whenever the outcome is uncertain and failing would matter: searching for something
+hidden, fighting, sneaking, persuading or lying, resisting, forcing, climbing, reading something
+dangerous. No roll for plain talk or a safe, simple action.
+Use bonus 1 for a clear advantage and penalty 1 for a clear disadvantage. Otherwise 0.
+Set move_to only when the player clearly goes to that place now."""
+
+# History holds the narration without its json, so weaker models copy that and drop the block.
+LOCAL_REMINDER = "\n\n(Keep this reply under 130 words, or 220 Chinese characters. End it with the ```json control block.)"
+
+
 class Keeper:
     def __init__(self, llm_client, campaign, system):
         self.llm = llm_client
@@ -372,10 +385,49 @@ class Keeper:
         return check_llm(self.llm.chat(msgs, system_prompt=system_prompt, temperature=0.5,
                                        max_tokens=600)) or ""
 
-    def respond_steps(self, state, user_input: str):
-        """One keeper turn, as a generator: yields Partial text, returns (narrative, Control)."""
+    @property
+    def local(self) -> bool:
+        return getattr(self.llm, "provider", "") == "ollama"
+
+    def referee(self, state, action: str):
+        """Ask one plain rules question before the story is written. Models that lose track of the
+        rules while narrating answer this reliably. Returns a ruling dict, or None to carry on without."""
+        ch = state.active_character() or state.characters[0]
+        scene = self.campaign.scene(state.scene_id) or {}
+        clues = [f"{c.get('skill')}: {c.get('description')}" for c in scene.get("clues", [])
+                 if c["id"] not in state.discovered_clues]
+        exits = [f"{x['to']} ({x.get('condition', '')})" for x in scene.get("exits", [])]
+        prompt = (f"Player's action: {action}\n"
+                  f"Scene: {scene.get('name')}. {str(scene.get('description', '')).strip()[:300]}\n"
+                  f"Skills of {ch.name}: {', '.join(ch.skills)}\n"
+                  f"Difficulty levels: {', '.join(self.system.difficulty_levels)}\n"
+                  f"Things to find here: {'; '.join(clues) or 'nothing special'}\n"
+                  f"Exits: {'; '.join(exits) or 'none'}")
+        try:
+            data = json.loads(self.llm.get_completion(prompt, system_prompt=REFEREE_PROMPT, temperature=0.1,
+                                                      max_tokens=120, json_mode=True))
+        except (TypeError, ValueError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def respond_steps(self, state, user_input: str, rule: bool = False):
+        """One keeper turn, as a generator: yields Partial text, returns (narrative, Control).
+        rule=True: the player just acted, so a local model gets a referee ruling first."""
+        ruling = self.referee(state, user_input) if rule and self.local else None
+        roll = (ruling or {}).get("roll")
+        roll = roll if isinstance(roll, str) and roll.lower() not in ("", "null", "none") else None
+        move = (ruling or {}).get("move_to")
+        exits = {x["to"] for x in (self.campaign.scene(state.scene_id) or {}).get("exits", [])}
+        move = move if move in exits and not roll else None
         nudge = self.parse_failures >= 2
         msgs = build_messages(state, self.campaign, self.system, user_input, nudge)
+        if self.local:
+            if roll:
+                msgs[-1]["content"] += (f"\n\n(The rules call for a {roll} roll. Narrate only up to the moment "
+                                        "of tension, then STOP. Do not say how it turns out.)")
+            elif move:
+                msgs[-1]["content"] += f"\n\n(The party now moves to: {(self.campaign.scene(move) or {}).get('name')}. Describe arriving there.)"
+            msgs[-1]["content"] += LOCAL_REMINDER
         system_prompt = build_system_prompt(self.campaign, self.system, state.language,
                                              state.god_mode, state=state)
         if hasattr(self.llm, "stream"):
@@ -387,6 +439,12 @@ class Keeper:
         else:
             raw = check_llm(self.llm.chat(msgs, system_prompt=system_prompt))
         narrative, ctrl = parse_response(raw)
+        if roll and not ctrl.roll_request:
+            ctrl.roll_request = {"character": state.active_character_id, "skill": roll,
+                                 "difficulty": ruling.get("difficulty"), "reason": "",
+                                 "bonus": ruling.get("bonus"), "penalty": ruling.get("penalty")}
+        if move and not ctrl.scene_transition:
+            ctrl.scene_transition = move
         if ctrl == Control.empty() and "```" not in (raw or ""):
             self.parse_failures += 1
         else:

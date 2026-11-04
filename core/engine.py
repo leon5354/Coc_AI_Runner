@@ -100,6 +100,7 @@ class Engine:
         self._undo_snapshot = None
         self.events = []               # dice to show the player; the UI drains these per beat
         self.outcome = OUTCOME         # what to ask the keeper after the last human roll
+        self._player_acted = False     # the next keeper call answers a free action: get a ruling first
         self._repair_character_ids()   # fix pre-fix saves with colliding ids (e.g. non-ASCII names)
 
     def _repair_character_ids(self):
@@ -177,6 +178,7 @@ class Engine:
         self.state.rolls_since_action = 0
         self.state.messages.append({"role": "player", "name": char.name if char else None, "content": text})
         self.state.save()
+        self._player_acted = True
         return text
 
     def keeper_steps(self, input_text: str):
@@ -431,7 +433,8 @@ class Engine:
         Sets pending_roll / pending_minigame and returns when it needs the player."""
         actors_requested = []
         for _ in range(MAX_KEEPER_CYCLES):
-            narrative, ctrl = yield from self.keeper.respond_steps(self.state, input_text)
+            rule, self._player_acted = self._player_acted, False
+            narrative, ctrl = yield from self.keeper.respond_steps(self.state, input_text, rule=rule)
             if narrative:
                 self.state.messages.append({"role": "keeper", "content": narrative})
             self._apply_effects(ctrl)
@@ -447,7 +450,7 @@ class Engine:
             if not ctrl.roll_request:
                 break
             char, skill, target = self._resolve_roll_target(ctrl.roll_request)
-            difficulty = ctrl.roll_request.get("difficulty", "regular")
+            difficulty = ctrl.roll_request.get("difficulty") or "regular"
             bonus = _roll_mod(ctrl.roll_request, "bonus", "bonus_dice", "advantage")
             penalty = _roll_mod(ctrl.roll_request, "penalty", "penalty_dice", "disadvantage")
             if char.controller == "human" and char.status == "active":

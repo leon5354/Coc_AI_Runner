@@ -225,6 +225,59 @@ e.submit_action(hero.id, "Professor, read it.")
 ev = e.drain_events()[0]
 assert ev["who"] == st.characters[1].name and len([d for d in ev["dice"] if d["die"] == "d100"]) == 3
 
+# local models get a referee ruling before the story: it can call a roll or a move by itself
+class LocalModel(Scripted):
+    provider = "ollama"
+
+    def __init__(self, ruling, *replies):
+        super().__init__(*replies)
+        self.ruling, self.prompts = ruling, []
+
+    def get_completion(self, prompt, **k):
+        self.prompts.append(prompt)
+        return self.ruling
+
+    def chat(self, messages, **k):
+        self.prompts.append(messages[-1]["content"])
+        return super().chat()
+
+
+llm = LocalModel('{"roll": "Spot Hidden", "difficulty": "hard", "bonus": 1, "move_to": null}', "You crouch. Something glints.")
+e, st, hero = fresh()
+e.set_llm(llm)
+e.submit_action(hero.id, "I search the floor.")
+assert st.pending_roll["skill"] == "Spot Hidden" and st.pending_roll["difficulty"] == "hard" and st.pending_roll["bonus"] == 1
+assert "Spot Hidden roll" in llm.prompts[-1] and "STOP" in llm.prompts[-1], "narrate up to the tension only"
+n = len(llm.prompts)
+e.resolve_roll()
+assert not any("Player's action" in p for p in llm.prompts[n:]), "no referee on a roll outcome"
+
+e, st, hero = fresh()
+target = camp.scene(st.scene_id)["exits"][0]["to"]
+e.set_llm(LocalModel('{"roll": null, "move_to": "%s"}' % target, "You set off."))
+e.submit_action(hero.id, "I go.")
+assert st.scene_id == target
+
+e, st, hero = fresh()
+e.set_llm(LocalModel('{"roll": "null", "move_to": "the moon"}', "Nothing happens."))
+start = st.scene_id
+e.submit_action(hero.id, "I wait.")
+assert st.pending_roll is None and st.scene_id == start, "bad rulings are ignored"
+
+e, st, hero = fresh()
+e.set_llm(LocalModel("not json at all", "It's quiet."))
+e.submit_action(hero.id, "I wait.")
+assert st.messages[-1]["content"] == "It's quiet.", "a broken referee never stops the turn"
+
+# a success with the skill of a clue here finds that clue, even if the model forgets
+clue = camp.scene(st.scene_id if False else camp.first_scene_id())["clues"][0]
+e, st, hero = fresh(ctrl(roll_request={"character": hero_id, "skill": clue["skill"]}), ctrl("You find it."))
+hero.skills[clue["skill"]] = 99
+e.submit_action(hero.id, "I look.")
+with mock.patch("rules.coc7e.random.randint", side_effect=[0, 5]):      # d100 = 50: a success
+    e.resolve_roll()
+assert clue["id"] in st.discovered_clues
+
 # keeper asks for a roll AND a dead/insane hero: never a gate for someone who can't act
 e, st, hero = fresh(ctrl(roll_request={"character": hero_id, "skill": "Dodge"}), ctrl("It ends badly."))
 hero.status = "unconscious"
