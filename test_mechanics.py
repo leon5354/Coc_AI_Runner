@@ -319,6 +319,8 @@ if last:
 
 # the referee can start a puzzle; its contents are asked for separately, once per scene
 class PuzzleModel(LocalModel):
+    payload = "{}"
+
     def get_completion(self, prompt, **k):
         return self.ruling if "Player's action" in prompt else self.payload
 
