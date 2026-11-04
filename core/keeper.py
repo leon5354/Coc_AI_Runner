@@ -360,12 +360,23 @@ def parse_response(text: str):
 
 REFEREE_PROMPT = """You are the rules referee of a tabletop game. You never tell the story.
 Read what the player just did and answer with JSON only:
-{"roll": "<skill from the list, or null>", "difficulty": "<level>", "bonus": 0, "penalty": 0, "move_to": "<exit id, or null>"}
+{"roll": "<skill from the list, or null>", "difficulty": "<level>", "bonus": 0, "penalty": 0,
+ "move_to": "<exit id, or null>", "device": "<puzzle device, or null>"}
 Call a roll whenever the outcome is uncertain and failing would matter: searching for something
 hidden, fighting, sneaking, persuading or lying, resisting, forcing, climbing, reading something
 dangerous. No roll for plain talk or a safe, simple action.
 Use bonus 1 for a clear advantage and penalty 1 for a clear disadvantage. Otherwise 0.
-Set move_to only when the player clearly goes to that place now."""
+Set move_to only when the player clearly goes to that place now.
+Set device only when this moment clearly is one of the puzzle devices, or the keeper notes ask for
+it now: for example a coded text, a keypad or dial, blank paper near heat. Usually null. A device
+replaces the roll, so leave roll null when you set it."""
+
+DEVICE_PROMPT = """You prepare one puzzle for a tabletop game. Answer with JSON only, using the same
+keys as the example, with new content that fits this story and scene. Keep it short. Write the
+player-facing text in the same language as the story."""
+
+# what a device can't work without; everything else has a sensible default
+DEVICE_NEEDS = {"hidden_text", "ciphertext", "solution", "code", "sequence", "wires", "correct", "message"}
 
 # History holds the narration without its json, so weaker models copy that and drop the block.
 LOCAL_REMINDER = "\n\n(Keep this reply under 130 words, or 220 Chinese characters. End it with the ```json control block.)"
@@ -404,13 +415,33 @@ class Keeper:
                   f"Skills of {ch.name}: {', '.join(ch.skills)}\n"
                   f"Difficulty levels: {', '.join(self.system.difficulty_levels)}\n"
                   f"Things to find here: {'; '.join(clues) or 'nothing special'}\n"
-                  f"Exits: {'; '.join(exits) or 'none'}")
+                  f"Exits: {'; '.join(exits) or 'none'}\n"
+                  f"Puzzle devices: {', '.join(minigames_catalog.for_setting(minigames_catalog.resolve_setting(self.campaign)))}\n"
+                  f"Keeper notes: {str(scene.get('keeper_notes', '')).strip()[:300]}")
         try:
             data = json.loads(self.llm.get_completion(prompt, system_prompt=REFEREE_PROMPT, temperature=0.1,
                                                       max_tokens=120, json_mode=True))
         except (TypeError, ValueError):
             return None
         return data if isinstance(data, dict) else None
+
+    def device(self, state, game: str, action: str):
+        """Ask for a device's contents as its own small job. Returns the payload, or None."""
+        sample = minigames_catalog.sample(game)
+        scene = self.campaign.scene(state.scene_id) or {}
+        told = next((m["content"] for m in reversed(state.messages) if m["role"] == "keeper"), "")
+        prompt = (f"Device: {game}. {minigames_catalog.CATALOG[game]['contract']}\n"
+                  f"Example: {json.dumps(sample, ensure_ascii=False)}\n"
+                  f"Scene: {scene.get('name')}. Keeper notes: {scene.get('keeper_notes', '')}\n"
+                  f"Story so far: {told[-500:]}\nThe player: {action}")
+        try:
+            data = json.loads(self.llm.get_completion(prompt, system_prompt=DEVICE_PROMPT, temperature=0.5,
+                                                      max_tokens=500, json_mode=True))
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(data, dict) or not all(data.get(k) for k in DEVICE_NEEDS & set(sample)):
+            return None
+        return {**data, "type": game}
 
     def respond_steps(self, state, user_input: str, rule: bool = False):
         """One keeper turn, as a generator: yields Partial text, returns (narrative, Control).
@@ -421,6 +452,13 @@ class Keeper:
         move = (ruling or {}).get("move_to")
         exits = {x["to"] for x in (self.campaign.scene(state.scene_id) or {}).get("exits", [])}
         move = move if move in exits and not roll else None
+        game = (ruling or {}).get("device")
+        fits = minigames_catalog.for_setting(minigames_catalog.resolve_setting(self.campaign))
+        puzzle = None
+        if game in fits and state.stats.get("device_scene") != state.scene_id:   # one per scene at most
+            puzzle = self.device(state, game, user_input)
+        if puzzle:
+            roll = move = None
         nudge = self.parse_failures >= 2
         msgs = build_messages(state, self.campaign, self.system, user_input, nudge)
         if self.local:
@@ -429,6 +467,9 @@ class Keeper:
                                         "of tension, then STOP. Do not say how it turns out.)")
             elif move:
                 msgs[-1]["content"] += f"\n\n(The party now moves to: {(self.campaign.scene(move) or {}).get('name')}. Describe arriving there.)"
+            elif puzzle:
+                msgs[-1]["content"] += ("\n\n(A puzzle is about to start. Lead up to it in 1-3 sentences and STOP. "
+                                        "Do not solve it, and do not give the answer.)")
             msgs[-1]["content"] += LOCAL_REMINDER
         system_prompt = build_system_prompt(self.campaign, self.system, state.language,
                                              state.god_mode, state=state)
@@ -447,6 +488,9 @@ class Keeper:
                                  "bonus": ruling.get("bonus"), "penalty": ruling.get("penalty")}
         if move and not ctrl.scene_transition:
             ctrl.scene_transition = move
+        if puzzle:
+            ctrl.minigame, ctrl.roll_request = ctrl.minigame or puzzle, None
+            state.stats["device_scene"] = state.scene_id
         if ctrl == Control.empty() and "```" not in (raw or ""):
             self.parse_failures += 1
         else:

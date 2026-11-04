@@ -269,6 +269,36 @@ e.set_llm(LocalModel("not json at all", "It's quiet."))
 e.submit_action(hero.id, "I wait.")
 assert st.messages[-1]["content"] == "It's quiet.", "a broken referee never stops the turn"
 
+# the referee can start a puzzle; its contents are asked for separately, once per scene
+class PuzzleModel(LocalModel):
+    def get_completion(self, prompt, **k):
+        return self.ruling if "Player's action" in prompt else self.payload
+
+
+llm = PuzzleModel('{"roll": null, "device": "cipher"}', "A line of symbols.", "More symbols.")
+llm.payload = '{"ciphertext": "GSRH", "solution": "this"}'
+e, st, hero = fresh()
+e.set_llm(llm)
+e.submit_action(hero.id, "I read the wall.")
+assert st.pending_minigame["type"] == "cipher" and st.pending_minigame["solution"] == "this"
+assert "Do not solve it" in llm.prompts[-1]
+e.resolve_minigame("The player SOLVED the cipher")
+e.submit_action(hero.id, "I read the next wall.")
+assert st.pending_minigame is None, "one device per scene"
+
+llm = PuzzleModel('{"roll": null, "device": "cipher"}', "Nothing.")
+llm.payload = '{"ciphertext": "GSRH"}'            # no solution: not playable
+e, st, hero = fresh()
+e.set_llm(llm)
+e.submit_action(hero.id, "I read the wall.")
+assert st.pending_minigame is None, "a half-made puzzle never starts"
+
+llm = PuzzleModel('{"roll": null, "device": "nonsense"}', "Nothing.")
+e, st, hero = fresh()
+e.set_llm(llm)
+e.submit_action(hero.id, "I read the wall.")
+assert st.pending_minigame is None
+
 # a success with the skill of a clue here finds that clue, even if the model forgets
 clue = camp.scene(st.scene_id if False else camp.first_scene_id())["clues"][0]
 e, st, hero = fresh(ctrl(roll_request={"character": hero_id, "skill": clue["skill"]}), ctrl("You find it."))
