@@ -1,8 +1,9 @@
 # Goal: a playable product
 
 The bar for "done". Work loops until every box is ticked **and checked for real**, not assumed.
-`python test_all.py` covers the mechanics, `python playtest.py` plays with a real AI, and the rest
-is checked by playing in a browser.
+`python test_all.py` covers the mechanics, `python checklist.py` proves in minutes that a model can
+run the game, `python playtest.py` plays a longer game with a real AI, and the rest is checked by
+playing in a browser.
 
 ## 1. Anyone can start it
 - [x] One command / double-click starts it. No API key needed.
@@ -10,7 +11,7 @@ is checked by playing in a browser.
 - [x] A title screen shows the campaigns as cards. Pick one, press Continue. No dev words on screen.
 
 ## 2. The game works end to end
-- [ ] A campaign can be played from the first scene to an ending, and the ending has its own screen. (The demo does this. A real AI hasn't finished a whole game yet: see below.)
+- [x] A campaign can be played from the first scene to an ending, and the ending has its own screen. (A real AI finishes the 3-scene test story. The ending screen itself was checked on the demo. Long campaigns: see below.)
 - [x] A real AI (not the scripted mock) plays turns with working rolls, clues, damage and scene changes.
 - [x] An AI failure never corrupts the story, and the player can retry.
 
@@ -36,7 +37,21 @@ is checked by playing in a browser.
 - [x] Characters have portraits. Moods have weather and light. Scene changes feel like events.
 - [x] Text stays easy to read. It works on a phone.
 
-## Real-AI playtest results (local model, 2026-11-04)
+## Checklist runs (`checklist.py`, 3-scene test story, 2026-11-04)
+
+20 checks: rolls, clues, push, negotiate, damage, Sanity, items, moving, puzzles, companions, Talk,
+Ask the Keeper, Archives, Inspect, memory, ending, and the whole story played to its ending.
+
+| Brain | Result | Bad text on screen | Whole story ended |
+|---|---|---|---|
+| Dolphin 12B, local | 38/40 over two rounds. After the last fixes, the 5 weakest checks: 14/15 | 15/15 clean after the fixes | 5 of 5, in 3-6 turns |
+| Claude Haiku, through a helper | 18/20. After the fixes, the 2 misses (puzzle, whole story) passed | 20/20 clean | Yes, 6 turns |
+
+The one weak spot on 12B: a horror sometimes doesn't cost Sanity (3 of 5 tries worked). 12B's writing
+is also clearly weaker than Haiku's: it can ignore the action or make up details.
+The Haiku run went through a helper, not the `claude -p` path. It proves the prompts, not the login.
+
+## Real-AI playtest results (Dolphin 24B, 2026-11-04)
 
 | Campaign | System | Turns | Rolls | Sanity | Clues | Moves | Items |
 |---|---|---|---|---|---|---|---|
@@ -60,7 +75,9 @@ as its ending while an unfinished one was not.
 | Last scene only | 5 | 5 | 2 | 0 | 0 | 2 | No, the hero lost the clapper |
 
 ## Not checked yet
-- A real AI playing a whole game to its ending. Endings are recognised when shown one directly, but
-  16 turns wasn't enough, and the story drifts. A longer run, or stronger pushes, should settle it.
+- A real AI playing a long campaign to its ending. The short story ends every time, but 16 turns
+  wasn't enough on The Drowned Bell before the pacing fixes.
 - Claude plan brain with a real login (needs `claude auth login` once).
-- How the sound and the dice flick feel to a person.
+- Scenario Architect in the web app with a real AI.
+- `run_web.bat` from start to finish, adding a model from a Hugging Face link, and OpenRouter sign-in.
+- How the sound and the dice flick feel to a person, and a real phone.

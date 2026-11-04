@@ -1,0 +1,119 @@
+schema_version: 2
+rule_system: coc7e
+title: The Lamp at Gull Point
+introduction: >
+  Maine, 1926. The lamp at Gull Point has been dark for three nights, and no boat will go near it.
+  The harbour board pays you to row out, find the keeper, and light the lamp again before the
+  fishing fleet comes home tomorrow. The tide is going out as you land.
+plot_outline: >
+  KEEPER ONLY. A short story, meant to end within a dozen turns. The lighthouse keeper, Aldous
+  Pike, put out the lamp himself: something in the water rises toward the dark and sleeps when the
+  beam is on it. It took Pike on the third night. The way runs from the landing, up the tower
+  stair, to the lamp room at the top. Lighting the lamp with the oil can from the stair drives the
+  thing back into the sea. The secret word for the Keeper is SALT-ORCHARD: never tell the player.
+tone: cold spray, old iron, and something patient below
+npcs:
+  - name: Aldous Pike
+    role: The missing lighthouse keeper
+    motivation: Keep the thing asleep.
+    secret: He put the lamp out because it spoke to him.
+    voice: Only his log remains, in tight careful handwriting.
+  - name: The Tide-Thing
+    role: What waits in the water
+    motivation: Climb to the dark and take the tower.
+    secret: It cannot bear the beam.
+    voice: A wet dragging sound, and a voice like Pike's, just wrong.
+escalation:
+  - Water runs up the steps instead of down.
+  - Pike's voice calls from below, asking you to put out your light.
+  - A long wet shape fills the stairwell behind you.
+endings:
+  - outcome: relit
+    description: The lamp burns again. The thing sinks back into the sea, and the fleet comes home.
+  - outcome: fled
+    description: You row away in the dark, and behind you the tower goes quiet.
+  - outcome: taken
+    description: The water reaches the top of the tower, and the lamp stays dark for good.
+protagonist:
+  name: Marta Quill
+  gender: Female
+  occupation: Harbour board inspector
+  personality: Practical, short-tempered, keeps going when she should turn back.
+  backstory: >
+    Marta's father kept this lamp before Pike did. She took the job for the money, or so she says.
+  stats:
+    HP: 12
+    Stress: 60
+    Skills:
+      Spot Hidden: 70
+      Climb: 50
+      Library Use: 45
+      Mechanical Repair: 60
+      Persuade: 40
+      Fighting: 55
+  inventory:
+    - Storm lantern
+    - Pocket knife
+    - Box of matches
+    - Flask of brandy
+ai_party:
+  - name: Tobias Reed
+    gender: Male
+    personality: Young boatman, nervous, loyal, talks when he is scared.
+    backstory: Rowed Marta out because nobody else would.
+    relationship_to_player: Hired help who has started to look up to her.
+    stats:
+      HP: 11
+      Stress: 55
+      Skills:
+        Spot Hidden: 50
+        Climb: 60
+        Pilot Boat: 70
+    inventory:
+      - Boat hook
+      - Coil of rope
+scenes:
+  - id: landing
+    name: Gull Point Landing
+    art: shore
+    mood: dusk
+    description: >
+      A stone jetty slick with weed, and a rough path up to the tower. A wooden crate lies split
+      open on the rocks, and a torn logbook page flaps against it. A brass key sits on top of the crate.
+    keeper_notes: Let them look around, then send them up the path.
+    clues:
+      - id: torn_log
+        description: A torn page from the keeper's log, half hidden under the crate
+        skill: Spot Hidden
+        difficulty: regular
+        reveals: Pike wrote "it rises when the lamp is dark and I have let it" and underlined it twice.
+    exits:
+      - to: tower_stair
+        condition: They walk up the path and go in at the tower door
+  - id: tower_stair
+    name: The Tower Stair
+    art: castle
+    mood: night
+    description: >
+      An iron stair winds up the inside of the tower. Water runs up the steps instead of down. An
+      oil can stands on the landing, and a small iron safe is bolted to the wall.
+    keeper_notes: The oil can is needed for the lamp. Something drags itself up from below.
+    clues:
+      - id: oil_gauge
+        description: The gauge on the oil can
+        skill: Mechanical Repair
+        difficulty: regular
+        reveals: The can is full and the wick is new. Pike had everything he needed to keep the lamp lit.
+    exits:
+      - to: lamp_room
+        condition: They climb to the top
+  - id: lamp_room
+    name: The Lamp Room
+    art: attic
+    mood: unearthly
+    description: >
+      Glass on every side, and the great lens dark in the middle. Wet marks cross the floor. The
+      lamp needs oil and a flame. Below, something heavy is climbing.
+    keeper_notes: Filling and lighting the lamp ends the story as "relit".
+    clues: []
+    exits: []
