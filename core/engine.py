@@ -63,10 +63,14 @@ def _protagonist_backstory(proto: dict, camp) -> str:
     return " ".join(bits)
 
 
-def new_game(campaign_path, protagonist_path=PROTAGONIST_YAML) -> GameState:
+def hero_sheet(campaign_path, protagonist_path=PROTAGONIST_YAML) -> dict:
+    """The campaign's own protagonist (setting-appropriate), else the generic fallback sheet."""
+    return campaign_mod.load(campaign_path).protagonist or yaml.safe_load(Path(protagonist_path).read_text(encoding="utf-8"))
+
+
+def new_game(campaign_path, protagonist_path=PROTAGONIST_YAML, hero: dict = None) -> GameState:
     camp = campaign_mod.load(campaign_path)
-    # The campaign's own protagonist (setting-appropriate) wins; else the generic fallback sheet.
-    proto = camp.protagonist or yaml.safe_load(Path(protagonist_path).read_text(encoding="utf-8"))
+    proto = hero_sheet(campaign_path, protagonist_path)
     chars = [_character_from_sheet(proto.get("name", "Player"), proto,
                                    personality=proto.get("personality", ""),
                                    backstory=_protagonist_backstory(proto, camp),
@@ -77,6 +81,15 @@ def new_game(campaign_path, protagonist_path=PROTAGONIST_YAML) -> GameState:
                                   backstory=p.get("backstory", ""))
         c.id = unique_id({ch.id for ch in chars}, c.id)   # never collide (widget keys need it)
         chars.append(c)
+    if hero:     # the player's own take on the character
+        c = chars[0]
+        c.name = str(hero.get("name") or c.name).strip()
+        c.id = unique_id({ch.id for ch in chars[1:]}, slugify(c.name))
+        c.personality = str(hero.get("personality", c.personality))
+        c.backstory = str(hero.get("backstory", c.backstory))
+        wanted = {k: int(v) for k, v in (hero.get("skills") or {}).items() if k in c.skills}
+        if sum({**c.skills, **wanted}.values()) <= sum(c.skills.values()):      # no free points
+            c.skills.update(wanted)
     system = rules.get_system(camp.rule_system)
     if not system.has_stress:   # no sanity track: nothing to show or report
         for c in chars:

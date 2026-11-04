@@ -164,6 +164,29 @@ assert lines[-1]["game"]["state"]["messages"][-1]["content"] == "The stair creak
 c.post("/api/game/undo")
 srv.ENGINE.keeper.llm = good
 
+# saves: a new game sits beside the old one; each can be picked up or deleted
+g = c.post("/api/game/start", json={"file": "the_haunting.yaml", "new": True, "hero": {
+    "name": "Mina Vale", "personality": "Calm.", "backstory": "A nurse.",
+    "skills": {"Spot Hidden": 99, "Occult": 11}}}).json()
+assert g["state"]["slot"] and g["state"]["characters"][0]["name"] == "Mina Vale"
+assert g["state"]["characters"][0]["skills"]["Spot Hidden"] == 99 and g["state"]["characters"][0]["id"] == "mina_vale"
+slot = g["state"]["slot"]
+assert c.post("/api/game/characters", json={"name": "Extra"}).status_code == 200     # forces a save
+camp = [x for x in c.get("/api/meta").json()["campaigns"] if x["file"] == "the_haunting.yaml"][0]
+assert {s["slot"] for s in camp["saves"]} == {"", slot}
+g = c.post("/api/game/start", json={"file": "the_haunting.yaml", "slot": slot}).json()
+assert g["state"]["characters"][0]["name"] == "Mina Vale"
+assert c.post("/api/game/saves/delete", json={"file": "the_haunting.yaml", "slot": slot}).json()["ok"]
+assert c.get("/api/game").json() is None, "deleting the running game ends it"
+assert c.post("/api/game/saves/delete", json={"file": "the_haunting.yaml", "slot": "../../x"}).status_code == 404
+hero = c.get("/api/campaign/hero", params={"file": "the_haunting.yaml"}).json()
+assert hero["name"] == "Eleanor Ash" and hero["skills"]["Occult"] == 40
+
+# skill points can't be invented
+g = c.post("/api/game/start", json={"file": "the_haunting.yaml", "new": True, "hero": {"skills": {"Occult": 99, "Spot Hidden": 99}}}).json()
+assert g["state"]["characters"][0]["skills"]["Occult"] == 40
+c.post("/api/game/saves/delete", json={"file": "the_haunting.yaml", "slot": g["state"]["slot"]})
+
 # resume: a fresh start without restart picks up the save
 n = len(c.get("/api/game").json()["state"]["messages"])
 g = c.post("/api/game/start", json={"file": "the_haunting.yaml"}).json()

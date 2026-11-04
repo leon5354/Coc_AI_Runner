@@ -35,8 +35,10 @@ export type Game = {
   map: { id: string; name: string; visited: boolean; exits: string[] }[]
 }
 export type LLMConfig = { provider: string; model: string; util_provider: string; util_model: string }
+export type Hero = { name: string; personality: string; occupation: string; backstory: string; skills: Record<string, number>; inventory: string[] }
+export type Save = { slot: string; turn: number; scene: string; when: number; ended: boolean }
 export type Campaign = {
-  file: string; name: string; title: string; has_save: boolean; system: string; intro: string
+  file: string; name: string; title: string; has_save: boolean; system: string; intro: string; saves: Save[]
   mood: string; scene_name: string; scene_text: string; scene_art: string
 }
 export type Meta = {

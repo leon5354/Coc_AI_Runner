@@ -50,6 +50,7 @@ class CharacterState:
 class GameState:
     schema_version: int = 2
     campaign_file: str = ""
+    slot: str = ""                   # "" is the first save; further games of a campaign get their own
     rule_system: str = "coc7e"
     scene_id: str = ""
     visited_scenes: list = field(default_factory=list)
@@ -93,7 +94,7 @@ class GameState:
     # --- persistence ---
     def save_path(self) -> Path:
         stem = Path(self.campaign_file).stem or "game"
-        return SAVES_DIR / f"{stem}.save.json"
+        return SAVES_DIR / (f"{stem}.{self.slot}.save.json" if self.slot else f"{stem}.save.json")
 
     def save(self):
         SAVES_DIR.mkdir(parents=True, exist_ok=True)
@@ -109,6 +110,27 @@ class GameState:
     @classmethod
     def load(cls, path) -> "GameState":
         return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
+
+
+def saves_of(campaign_file) -> list:
+    """[{slot, turn, scene_id, when}] for this campaign's saves, newest first."""
+    stem = Path(campaign_file).stem
+    out = []
+    for p in sorted(SAVES_DIR.glob(f"{stem}*.save.json"), key=lambda f: -f.stat().st_mtime):
+        slot = p.name[len(stem):-len(".save.json")].lstrip(".")
+        if p.name[len(stem):][:1] not in (".",):       # another campaign whose name starts the same
+            continue
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        out.append({"slot": slot, "turn": d.get("turn_count", 0), "scene_id": d.get("scene_id", ""),
+                    "when": int(p.stat().st_mtime), "ended": bool(d.get("ending"))})
+    return out
+
+
+def save_path_of(campaign_file, slot: str = "") -> Path:
+    return GameState(campaign_file=str(campaign_file), slot=slot).save_path()
 
 
 def save_exists(campaign_file) -> Path | None:

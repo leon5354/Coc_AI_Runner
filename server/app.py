@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -35,8 +36,8 @@ import rules  # noqa: E402
 from core import campaign as campaign_mod  # noqa: E402
 from core import game_state  # noqa: E402
 from core import minigames_catalog as mc  # noqa: E402
-from core.engine import Engine, new_game  # noqa: E402
-from core.game_state import GameState, save_exists, slugify, unique_id  # noqa: E402
+from core.engine import Engine, hero_sheet, new_game  # noqa: E402
+from core.game_state import GameState, save_exists, save_path_of, saves_of, slugify, unique_id  # noqa: E402
 from core.keeper import LANGUAGE_LABELS, Partial  # noqa: E402
 from core.llm_client import (CLAUDE_MODELS, MAIN_MODELS, PROVIDERS, UTIL_MODELS, LLMError,  # noqa: E402
                              ollama_base)
@@ -188,6 +189,7 @@ def meta():
         first = c.scenes[0] if c.scenes else {}
         camps.append({"file": p.name, "name": p.stem, "title": c.title, "has_save": save_exists(p) is not None,
                       "system": rules.get_system(c.rule_system).label, "intro": c.introduction.strip()[:220],
+                      "saves": [{**x, "scene": (c.scene(x["scene_id"]) or {}).get("name", "")} for x in saves_of(p)],
                       "mood": c.mood(first.get("id", "")), "scene_name": first.get("name", ""),
                       "scene_text": first.get("description", ""), "scene_art": first.get("art", "")})
     return {
@@ -354,6 +356,38 @@ def _campaign_path(file: str) -> Path:
 class StartIn(BaseModel):
     file: str
     restart: bool = False
+    slot: str = ""
+    new: bool = False            # a fresh game beside any existing saves
+    hero: dict | None = None
+
+
+@app.get("/api/campaign/hero")
+def campaign_hero(file: str):
+    """The sheet the character creator starts from."""
+    p = hero_sheet(_campaign_path(file))
+    stats = p.get("stats", p)
+    return {"name": p.get("name", ""), "personality": p.get("personality", ""), "occupation": p.get("occupation", ""),
+            "backstory": str(p.get("backstory") or p.get("background") or "").strip(),
+            "skills": {k: int(v) for k, v in (stats.get("Skills") or {}).items()},
+            "inventory": [str(i) for i in p.get("inventory", [])]}
+
+
+class SaveIn(BaseModel):
+    file: str
+    slot: str = ""
+
+
+@app.post("/api/game/saves/delete")
+def delete_save(body: SaveIn):
+    """Delete one save. The page asks the player to confirm first."""
+    global ENGINE
+    path = save_path_of(_campaign_path(body.file), body.slot).resolve()
+    if path.parent != game_state.SAVES_DIR.resolve() or not path.exists():
+        raise HTTPException(404, "No such save.")
+    if ENGINE and ENGINE.state.save_path().resolve() == path:
+        ENGINE = None
+    path.unlink()
+    return {"ok": True}
 
 
 @app.post("/api/game/start")
@@ -362,12 +396,18 @@ def start(body: StartIn):
 
     def go():
         global ENGINE
-        save = save_exists(path)
+        save = save_path_of(path, body.slot)
+        save = save if save.exists() else None
         if body.restart and save:
             save.unlink()
             save = None
         try:
-            state = GameState.load(save) if save else new_game(path)
+            if body.new:
+                state = new_game(path, hero=body.hero)
+                if save_exists(path) or saves_of(path):
+                    state.slot = datetime.now().strftime("%m%d-%H%M%S")
+            else:
+                state = GameState.load(save) if save else new_game(path, hero=body.hero)
             main, util = make_llms()
         except (ValueError, ImportError) as e:
             raise HTTPException(400, f"Could not start the AI: {e}. Pick a brain in Settings.")

@@ -2,6 +2,8 @@
 // string without a translation simply shows in English.
 const ZH: Record<string, string> = {
   // title
+  "New game": "新遊戲", "Your character": "你的角色", "{n} points left": "尚餘 {n} 點", "Skills": "技能", "You carry": "隨身物品",
+  "Delete this save": "刪除存檔", "Delete this save? It can't be brought back.": "刪除這個存檔？刪除後無法復原。", "finished": "已完結",
   "New scenario": "新劇本", "⚙ Settings": "⚙ 設定", "Continue": "繼續", "Resume": "繼續遊戲", "Begin": "開始",
   "Start over": "重新開始", "saved game": "有存檔", "Pick a campaign": "選擇劇本",
   // story

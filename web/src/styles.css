@@ -98,6 +98,13 @@ details[open] > summary { margin-bottom: 6px; }
 .title-intro { font-family: var(--serif); font-size: 1.08em; line-height: 1.65; }
 .title-brain { color: var(--muted); font-size: .85em; cursor: pointer; }
 .title-main .row > button { flex: none; }
+.save-row { display: flex; gap: 8px; align-items: center; background: rgba(10,12,18,.62); border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 6px 10px; margin: 6px 0; font-size: .9em; }
+.save-row i { color: var(--muted); font-style: normal; font-size: .85em; }
+.save-row button { flex: none; padding: 3px 10px; }
+.creator h4 { margin-top: 14px; }
+.skill-edit { display: flex; align-items: center; gap: 6px; background: #161922; border-radius: 8px; padding: 4px 8px; }
+.skill-edit button { padding: 0 8px; }
+.skill-edit b { min-width: 26px; text-align: center; }
 
 /* --- game screen --- */
 .game { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
