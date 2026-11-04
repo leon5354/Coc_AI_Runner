@@ -213,7 +213,7 @@ e, st, hero = fresh(ctrl(roll_request={"character": hero_id, "skill": "Spot Hidd
                                        "advantage": True}), ctrl("It works out."))
 e.submit_action(hero.id, "look")
 assert st.pending_roll["bonus"] == 1 and st.pending_roll["difficulty"] == "hard"
-assert "d100 under" in e.roll_preview()["need"] and 0 <= e.roll_preview()["chance"] <= 100
+assert "d100 ≤" in e.roll_preview()["need"] and 0 <= e.roll_preview()["chance"] <= 100
 e.resolve_roll()
 ev = e.drain_events()[0]
 assert ev["kind"] == "skill" and len([d for d in ev["dice"] if d["die"] == "d100"]) == 2, ev
