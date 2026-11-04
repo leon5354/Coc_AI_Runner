@@ -4,6 +4,7 @@
 // ponytail: answers (cipher solution, lock code, correct wire) live in the payload the browser
 // gets. Fine for local play; check guesses server-side once players share a room online.
 import { useEffect, useRef, useState, type ReactNode } from "react"
+import { t } from "./i18n"
 import type { Payload } from "./api"
 
 type Props = { p: Payload; done: (result: string) => void }
@@ -117,9 +118,9 @@ function BurnReveal({ p, done }: Props) {
       <div className="paper-wrap" ref={wrap}>
         <div className="paper" ref={paper} style={{ background: skin.bg, color: skin.ink, fontFamily: skin.font }} />
         <div className="flame" ref={flame}>🕯️</div>
-        <div className="hint">Move the candle across the surface… {label}</div>
+        <div className="hint">{t("Move the candle across the surface…")} {label}</div>
       </div>
-      <button onClick={() => done(result)}>Expose the whole surface to the heat</button>
+      <button onClick={() => done(result)}>{t("Expose the whole surface to the heat")}</button>
     </>
   )
 }
@@ -135,12 +136,12 @@ function Seance({ p, done }: Props) {
   }, [])
   return (
     <>
-      <h3>🕯️ The planchette begins to move...</h3>
+      <h3>🕯️ {t("The planchette begins to move...")}</h3>
       <div className="board">
         <div className="spelled">{msg.slice(0, n)}</div>
         <div className="planchette">☩</div>
       </div>
-      <button onClick={() => done(`The spirit spelled out: "${p.message ?? ""}"`)}>It stops.</button>
+      <button onClick={() => done(`The spirit spelled out: "${p.message ?? ""}"`)}>{t("It stops.")}</button>
     </>
   )
 }
@@ -168,15 +169,15 @@ function Cipher({ p, done }: Props) {
 
   return (
     <>
-      <h3>🔏 A cipher blocks the way</h3>
+      <h3>🔏 {t("A cipher blocks the way")}</h3>
       <pre className="cipher">{p.ciphertext}</pre>
       {attempts >= hintAfter && p.hint && <p className="muted">💡 Hint: {p.hint}</p>}
       <form className="row" onSubmit={(e) => { e.preventDefault(); tryIt() }}>
-        <input className="grow" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Your answer" autoFocus />
-        <button type="submit" className="primary">Try it</button>
+        <input className="grow" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder={t("Your answer")} autoFocus />
+        <button type="submit" className="primary">{t("Try it")}</button>
       </form>
       {err && <p className="danger">{err}</p>}
-      {p.allow_giveup !== false && <button onClick={() => done("The player gave up on the cipher unsolved")}>Give up</button>}
+      {p.allow_giveup !== false && <button onClick={() => done("The player gave up on the cipher unsolved")}>{t("Give up")}</button>}
     </>
   )
 }
@@ -204,15 +205,15 @@ function CombinationLock({ p, done }: Props) {
 
   return (
     <>
-      <h3>🔒 A combination lock</h3>
+      <h3>🔒 {t("A combination lock")}</h3>
       <Clue text={p.clue} />
       <form className="row" onSubmit={(e) => { e.preventDefault(); turn() }}>
         <input className="grow dial" value={guess} maxLength={code.length} inputMode="numeric" autoFocus
           placeholder={`Enter ${code.length} digits`} onChange={(e) => setGuess(e.target.value)} />
-        <button type="submit" className="primary">Turn the dial</button>
+        <button type="submit" className="primary">{t("Turn the dial")}</button>
       </form>
       {err && <p className="danger">{err}</p>}
-      <button onClick={() => done("The player stepped away from the lock without opening it")}>Step away</button>
+      <button onClick={() => done("The player stepped away from the lock without opening it")}>{t("Step away")}</button>
     </>
   )
 }
@@ -245,12 +246,12 @@ function TarotDraw({ p, done }: Props) {
   return (
     <>
       <h3>🃏 {p.context || "The cards are laid out..."}</h3>
-      {!cards ? <button className="primary" onClick={() => setCards(shuffled(TAROT_DECK).slice(0, 3))}>Draw three cards</button> : <>
+      {!cards ? <button className="primary" onClick={() => setCards(shuffled(TAROT_DECK).slice(0, 3))}>{t("Draw three cards")}</button> : <>
         <div className="cards">
           {cards.map(([name, meaning]) => <div className="card" key={name}><b>{name}</b><p className="muted">{meaning}</p></div>)}
         </div>
         <button className="primary" onClick={() => done("The cards drawn: " + cards.map(([n, m]) => `${n} (${m})`).join("; ") + ". Weave these omens into what follows.")}>
-          Accept the omen
+          {t("Accept the omen")}
         </button>
       </>}
     </>
@@ -281,14 +282,14 @@ function GlyphSequence({ p, done }: Props) {
 
   return (
     <>
-      <h3>✴️ Arcane glyphs await the correct order</h3>
+      <h3>✴️ {t("Arcane glyphs await the correct order")}</h3>
       <Clue text={p.clue} />
-      <p><b>Activated:</b> {picked.length ? picked.join(" → ") : <i>none</i>} ({picked.length}/{sequence.length})</p>
+      <p><b>{t("Activated:")}</b> {picked.length ? picked.join(" → ") : <i>none</i>} ({picked.length}/{sequence.length})</p>
       <div className="glyphs">
         {pool.map((g, i) => <button key={i} disabled={picked.includes(g)} onClick={() => press(g)}>{g}</button>)}
       </div>
       <p className="muted">A wrong glyph resets the sequence. {max - attempts} attempt(s) before the ward seals.</p>
-      <button onClick={() => done("The player stepped away from the glyphs without completing the sequence")}>Step back from the glyphs</button>
+      <button onClick={() => done("The player stepped away from the glyphs without completing the sequence")}>{t("Step back from the glyphs")}</button>
     </>
   )
 }
@@ -327,8 +328,8 @@ function DiceDuel({ p, done }: Props) {
       {!over && <>
         <p><b>Round {log.length + 1} of {rounds}</b> — score {you}-{them}. Choose your play:</p>
         <div className="row">
-          <button className="grow" onClick={() => play("bold")}>🔥 Bold (d10 — swing big)</button>
-          <button className="grow" onClick={() => play("steady")}>🛡️ Steady (d6+2 — play safe)</button>
+          <button className="grow" onClick={() => play("bold")}>{t("🔥 Bold (d10 — swing big)")}</button>
+          <button className="grow" onClick={() => play("steady")}>{t("🛡️ Steady (d6+2 — play safe)")}</button>
         </div>
       </>}
     </>
@@ -348,7 +349,7 @@ function WireCut({ p, done }: Props) {
   useEffect(() => { if (!wires.length || !wires.includes(correct)) done("(wire_cut had no valid wires — skipped)") }, [])
   return (
     <>
-      <h3>✂️ One cut. Choose.</h3>
+      <h3>✂️ {t("One cut. Choose.")}</h3>
       <Clue text={p.clue} />
       <div className="wires">{wires.map((w) => <div key={w} style={{ background: WIRE_COLORS[w] ?? "#888" }} />)}</div>
       <div className="row">
@@ -360,7 +361,7 @@ function WireCut({ p, done }: Props) {
           </button>
         ))}
       </div>
-      <button onClick={() => done("The player backed away without cutting any wire")}>Back away without cutting</button>
+      <button onClick={() => done("The player backed away without cutting any wire")}>{t("Back away without cutting")}</button>
     </>
   )
 }
@@ -374,7 +375,7 @@ function MemoryEcho({ p, done }: Props) {
   const maxAttempts = Math.max(1, num(p.attempts, 2))
   const [seq] = useState(() => Array.from({ length }, () => Math.floor(Math.random() * SIGILS.length)))
   const [lit, setLit] = useState<number | null>(null)
-  const [status, setStatus] = useState("Watch…")
+  const [status, setStatus] = useState(t("Watch…"))
   const [dead, setDead] = useState(false)
   const s = useRef({ accepting: false, pos: 0, attempts: 0, timers: [] as number[] })
   const later = (fn: () => void, ms: number) => { s.current.timers.push(window.setTimeout(fn, ms)) }
@@ -382,9 +383,9 @@ function MemoryEcho({ p, done }: Props) {
 
   function playback() {
     s.current.accepting = false; s.current.pos = 0
-    setStatus("Watch…")
+    setStatus(t("Watch…"))
     seq.forEach((x, n) => later(() => flash(x, 420), 650 * (n + 1)))
-    later(() => { s.current.accepting = true; setStatus("Repeat the sequence.") }, 650 * (seq.length + 1))
+    later(() => { s.current.accepting = true; setStatus(t("Repeat the sequence.")) }, 650 * (seq.length + 1))
   }
   useEffect(() => { later(playback, 400); return () => s.current.timers.forEach(clearTimeout) }, [])
 
@@ -396,16 +397,16 @@ function MemoryEcho({ p, done }: Props) {
       st.pos++
       if (st.pos >= seq.length) {
         st.accepting = false
-        setStatus("The pattern answers.")
+        setStatus(t("The pattern answers."))
         later(() => done("The player repeated the pattern PERFECTLY — the mechanism yields"), 700)
       }
     } else if (++st.attempts >= maxAttempts) {
       st.accepting = false
       setDead(true)
-      setStatus("The pattern fades, unanswered.")
+      setStatus(t("The pattern fades, unanswered."))
       later(() => done("The player FAILED to repeat the pattern — the echo fades and the way stays shut"), 900)
     } else {
-      setStatus("Wrong — it begins again…")
+      setStatus(t("Wrong — it begins again…"))
       later(playback, 900)
     }
   }
@@ -421,7 +422,7 @@ function MemoryEcho({ p, done }: Props) {
           ))}
         </div>
       </div>
-      <button onClick={() => done("The player stepped away without answering the pattern")}>Step away from the pattern</button>
+      <button onClick={() => done("The player stepped away without answering the pattern")}>{t("Step away from the pattern")}</button>
     </>
   )
 }

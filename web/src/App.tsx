@@ -4,6 +4,7 @@ import type { Game, Meta, Payload, PendingRoll, RollEvent, TurnLine } from "./ap
 import Architect from "./Architect"
 import { SceneArt } from "./art/SceneArt"
 import { Vignette } from "./Atmosphere"
+import { pickLang } from "./i18n"
 import type { TableProps } from "./dice/DiceTable"
 import type { DieSpec } from "./dice/table"
 import Play from "./Play"
@@ -185,6 +186,7 @@ export default function App() {
 
   if (!meta) return <div className="boot">{error || "Opening the case files…"}</div>
 
+  pickLang(game?.state.language, screen === "title" ? undefined : game?.title)
   const ctx: Ctx = {
     meta, game, busy, partial, call, turn, refreshMeta, setError, draft, setDraft, go: setScreen,
     openSettings: () => setSettings(true), rollPending, freeRoll,

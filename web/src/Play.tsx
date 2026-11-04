@@ -1,5 +1,6 @@
 // The game screen: story on the left, the scene's art on the right, party down the side.
 import { useEffect, useRef, useState } from "react"
+import { t } from "./i18n"
 import Markdown from "react-markdown"
 import * as api from "./api"
 import type { Character, Game, Message } from "./api"
@@ -38,15 +39,15 @@ function RollGate({ ctx, game }: { ctx: Ctx; game: Game }) {
     <div className="gate">
       <div className="gate-head">
         <div className="grow">
-          <h3>{who?.name} must roll <b>{pr.skill}</b></h3>
-          <p className="muted">{game.roll_preview?.need} · {pr.difficulty}{mod > 0 ? " · bonus" : mod < 0 ? " · penalty" : ""} · about {game.roll_preview?.chance}%{pr.reason ? ` · ${pr.reason}` : ""}</p>
+          <h3>{who?.name} {t("must roll")} <b>{pr.skill}</b></h3>
+          <p className="muted">{game.roll_preview?.need} · {t(pr.difficulty)}{mod > 0 ? ` · ${t("bonus")}` : mod < 0 ? ` · ${t("penalty")}` : ""} · {t("about")} {game.roll_preview?.chance}%{pr.reason ? ` · ${pr.reason}` : ""}</p>
         </div>
-        <button className="primary big" disabled={!!ctx.busy} onClick={() => ctx.rollPending()}>🎲 Pick up the dice</button>
+        <button className="primary big" disabled={!!ctx.busy} onClick={() => ctx.rollPending()}>{t("🎲 Pick up the dice")}</button>
       </div>
       <form className="row" onSubmit={(e) => { e.preventDefault(); if (arg.trim()) ctx.turn("/api/game/negotiate", { text: arg.trim() }) }}>
         <input className="grow" value={arg} onChange={(e) => setArg(e.target.value)} disabled={!!ctx.busy}
-          placeholder="…or argue for a different approach" />
-        <button type="submit" disabled={!!ctx.busy || !arg.trim()}>Negotiate</button>
+          placeholder={t("…or argue for a different approach")} />
+        <button type="submit" disabled={!!ctx.busy || !arg.trim()}>{t("Negotiate")}</button>
       </form>
     </div>
   )
@@ -61,17 +62,17 @@ function PushGate({ ctx, game }: { ctx: Ctx; game: Game }) {
     <div className="gate">
       <div className="gate-head">
         <div className="grow">
-          <h3>{who?.name} failed <b>{p.skill}</b></h3>
-          <p className="muted">Rolled {p.roll}, needed {p.need} or less. You have {who?.luck} Luck.</p>
+          <h3>{who?.name} {t("failed")} <b>{p.skill}</b></h3>
+          <p className="muted">{t("Rolled {roll}, needed {need} or less. You have {luck} Luck.", { roll: p.roll, need: p.need, luck: who?.luck ?? 0 })}</p>
         </div>
-        <button disabled={!!ctx.busy} onClick={() => ctx.turn("/api/game/accept")}>Accept it</button>
-        <button disabled={!!ctx.busy || !afford} title="Spend Luck to turn this into a bare success"
-          onClick={() => ctx.turn("/api/game/luck")}>🍀 Spend {p.luck_cost} Luck</button>
+        <button disabled={!!ctx.busy} onClick={() => ctx.turn("/api/game/accept")}>{t("Accept it")}</button>
+        <button disabled={!!ctx.busy || !afford} title={t("Spend Luck to turn this into a bare success")}
+          onClick={() => ctx.turn("/api/game/luck")}>🍀 {t("Spend {n} Luck", { n: p.luck_cost })}</button>
       </div>
       <form className="row" onSubmit={(e) => { e.preventDefault(); if (why.trim()) ctx.rollPending(why.trim()) }}>
         <input className="grow" value={why} onChange={(e) => setWhy(e.target.value)} disabled={!!ctx.busy}
-          placeholder="Or push it: how do you try harder? Failing again will cost you." />
-        <button type="submit" className="primary" disabled={!!ctx.busy || !why.trim()}>Push the roll</button>
+          placeholder={t("Or push it: how do you try harder? Failing again will cost you.")} />
+        <button type="submit" className="primary" disabled={!!ctx.busy || !why.trim()}>{t("Push the roll")}</button>
       </form>
     </div>
   )
@@ -90,7 +91,7 @@ function Composer({ ctx, game }: { ctx: Ctx; game: Game }) {
   const text = ctx.draft
   useEffect(() => { if (text) box.current?.focus() }, [text.length > 0])
 
-  if (!humans.length) return <div className="warn-box">Nobody at the table can act. Undo the last turn, or switch a companion to a human player in their panel.</div>
+  if (!humans.length) return <div className="warn-box">{t("Nobody at the table can act. Undo the last turn, or switch a companion to a human player in their panel.")}</div>
   const who = humans.find((c) => c.id === acting) ?? humans.find((c) => c.id === st.active_character_id) ?? humans[0]
 
   async function submit() {
@@ -102,7 +103,8 @@ function Composer({ ctx, game }: { ctx: Ctx; game: Game }) {
     else await ctx.call(() => api.send<Game>("/api/game/ooc", { question: t }), "The Keeper leans back…")
   }
 
-  const placeholder = { act: `What does ${who.name} do?`, talk: `What does ${who.name} say? No turn spent.`, ooc: "Ask anything: rules, a recap, your options…" }[mode]
+  const placeholder = { act: t("What does {name} do?", { name: who.name }), talk: t("What does {name} say? No turn spent.", { name: who.name }),
+    ooc: t("Ask anything: rules, a recap, your options…") }[mode]
 
   return (
     <div className="composer">
@@ -112,18 +114,18 @@ function Composer({ ctx, game }: { ctx: Ctx; game: Game }) {
           if (research.q.trim()) ctx.call(() => api.send<Game>("/api/game/research", { query: research.q.trim(), web: research.web }), "Dust rises from old shelves…")
           setResearch({ open: false, q: "", web: false })
         }}>
-          <input className="grow" autoFocus value={research.q} placeholder="Look something up in the archives…" onChange={(e) => setResearch({ ...research, q: e.target.value })} />
-          <label className="toggle"><input type="checkbox" checked={research.web} onChange={(e) => setResearch({ ...research, web: e.target.checked })} />web</label>
-          <button type="submit">Search</button>
+          <input className="grow" autoFocus value={research.q} placeholder={t("Look something up in the archives…")} onChange={(e) => setResearch({ ...research, q: e.target.value })} />
+          <label className="toggle"><input type="checkbox" checked={research.web} onChange={(e) => setResearch({ ...research, web: e.target.checked })} />{t("web")}</label>
+          <button type="submit">{t("Search")}</button>
         </form>
       )}
       <div className="row composer-modes">
         <div className="seg">
-          {(Object.keys(MODES) as Mode[]).map((m) => <button key={m} className={m === mode ? "on" : ""} onClick={() => setMode(m)}>{MODES[m]}</button>)}
+          {(Object.keys(MODES) as Mode[]).map((m) => <button key={m} className={m === mode ? "on" : ""} onClick={() => setMode(m)}>{t(MODES[m])}</button>)}
         </div>
-        <button onClick={() => setResearch({ ...research, open: !research.open })}>📚 Archives</button>
+        <button onClick={() => setResearch({ ...research, open: !research.open })}>{t("📚 Archives")}</button>
         {humans.length > 1 && (
-          <select value={who.id} onChange={(e) => setActing(e.target.value)} title="Acting as">
+          <select value={who.id} onChange={(e) => setActing(e.target.value)} title={t("Acting as")}>
             {humans.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         )}
@@ -132,7 +134,7 @@ function Composer({ ctx, game }: { ctx: Ctx; game: Game }) {
         <textarea ref={box} className="grow" rows={2} value={text} placeholder={placeholder} disabled={!!ctx.busy}
           onChange={(e) => ctx.setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit() } }} />
-        <button type="submit" className="primary" disabled={!!ctx.busy || !text.trim()}>Send</button>
+        <button type="submit" className="primary" disabled={!!ctx.busy || !text.trim()}>{t("Send")}</button>
       </form>
     </div>
   )
@@ -150,12 +152,12 @@ function DiceTray({ ctx, close }: { ctx: Ctx; close: () => void }) {
     <div className="tray" onClick={(e) => e.stopPropagation()}>
       <div className="seg">{TRAY.map((d) => <button key={d} className={d === die ? "on" : ""} onClick={() => setDie(d)}>{d}</button>)}</div>
       <div className="row">
-        <span>How many</span>
+        <span>{t("How many")}</span>
         <button onClick={() => setN(Math.max(1, n - 1))}>−</button><b>{n}</b><button onClick={() => setN(Math.min(die === "d100" ? 2 : 6, n + 1))}>+</button>
-        <span>Add</span>
+        <span>{t("Modifier")}</span>
         <button onClick={() => setMod(mod - 1)}>−</button><b>{mod}</b><button onClick={() => setMod(mod + 1)}>+</button>
       </div>
-      <button className="primary" disabled={!!ctx.busy} onClick={() => { close(); ctx.freeRoll(expr, preset) }}>Roll {expr}</button>
+      <button className="primary" disabled={!!ctx.busy} onClick={() => { close(); ctx.freeRoll(expr, preset) }}>{t("Roll {expr}", { expr })}</button>
     </div>
   )
 }
@@ -164,7 +166,7 @@ function PartyRail({ game, open }: { game: Game; open: (id: string, tab?: "items
   return (
     <aside className="rail">
       {game.state.characters.map((c) => (
-        <button key={c.id} className={c.id === game.state.active_character_id ? "rail-c on" : "rail-c"} onClick={() => open(c.id)} title={`${c.name}: status and items`}>
+        <button key={c.id} className={c.id === game.state.active_character_id ? "rail-c on" : "rail-c"} onClick={() => open(c.id)} title={c.name}>
           <Portrait name={c.name} about={`${c.personality} ${c.backstory}`} size={62} ratio={mindOf(c)} down={c.status !== "active"} />
           <span className="rail-name">{c.name}</span>
           <Bar kind="hp" value={c.hp} max={c.max_hp} label={`${c.hp}`} />
@@ -185,18 +187,18 @@ function Ending({ ctx, game }: { ctx: Ctx; game: Game }) {
       <h2>{e.outcome}</h2>
       {e.description && <p>{e.description}</p>}
       <div className="end-stats">
-        <div><b>{st.turn_count}</b><span>turns</span></div>
-        <div><b>{st.stats.rolls ?? 0}</b><span>rolls</span></div>
-        <div><b>{st.stats.crits ?? 0}</b><span>criticals</span></div>
-        <div><b>{st.stats.fumbles ?? 0}</b><span>fumbles</span></div>
-        <div><b>{game.clues.length}/{game.clues_total}</b><span>clues</span></div>
-        <div><b>{st.visited_scenes.length}</b><span>places</span></div>
+        <div><b>{st.turn_count}</b><span>{t("turns")}</span></div>
+        <div><b>{st.stats.rolls ?? 0}</b><span>{t("rolls")}</span></div>
+        <div><b>{st.stats.crits ?? 0}</b><span>{t("criticals")}</span></div>
+        <div><b>{st.stats.fumbles ?? 0}</b><span>{t("fumbles")}</span></div>
+        <div><b>{game.clues.length}/{game.clues_total}</b><span>{t("clues")}</span></div>
+        <div><b>{st.visited_scenes.length}</b><span>{t("places")}</span></div>
       </div>
       <p className="muted">{st.characters.map((c) => `${c.name}: ${c.status}`).join(" · ")}</p>
       <div className="row">
-        <a className="button" href="/api/game/export" download={`${game.title}.md`}>📜 Keep the story</a>
-        <button disabled={!game.can_undo} onClick={() => ctx.call(() => api.send("/api/game/undo"))}>↩ Undo the ending</button>
-        <button className="primary" onClick={() => ctx.go("title")}>Back to the title</button>
+        <a className="button" href="/api/game/export" download={`${game.title}.md`}>{t("📜 Keep the story")}</a>
+        <button disabled={!game.can_undo} onClick={() => ctx.call(() => api.send("/api/game/undo"))}>{t("↩ Undo the ending")}</button>
+        <button className="primary" onClick={() => ctx.go("title")}>{t("Back to the title")}</button>
       </div>
     </div>
   )
@@ -220,7 +222,7 @@ export default function Play({ ctx, lastMinigame, onMinigameDone }: {
     return () => clearTimeout(t)
   }, [game?.state.scene_id])
 
-  if (!game) return <div className="info"><button onClick={() => ctx.go("title")}>Pick a campaign</button></div>
+  if (!game) return <div className="info"><button onClick={() => ctx.go("title")}>{t("Pick a campaign")}</button></div>
   const st = game.state
   const chars = st.characters
   const lead = chars.find((c) => c.id === st.active_character_id) ?? chars[0]
@@ -228,13 +230,13 @@ export default function Play({ ctx, lastMinigame, onMinigameDone }: {
   return (
     <div className="game">
       <header className="topbar">
-        <button onClick={() => ctx.go("title")} title="Back to the title">☰</button>
-        <div className="grow topbar-title"><b>{game.title}</b><span>{game.scene_name} · turn {st.turn_count}</span></div>
+        <button onClick={() => ctx.go("title")} title={t("Back to the title")}>☰</button>
+        <div className="grow topbar-title"><b>{game.title}</b><span>{game.scene_name} · {t("turn {n}", { n: st.turn_count })}</span></div>
         <div className="topbar-tools">
-          <button disabled={!game.can_undo || !!ctx.busy} title="Rewind the last turn" onClick={() => ctx.call(() => api.send("/api/game/undo"))}>↩</button>
-          <button onClick={() => setTray(!tray)} title="Roll any dice">🎲</button>
-          <button onClick={() => setPanel({ who: lead.id, tab: "items" })} title="狀態欄 / 物品欄 — status and items">🎒</button>
-          <button onClick={() => setPanel({ who: lead.id, tab: "journal" })} title="Clues and places">📖</button>
+          <button disabled={!game.can_undo || !!ctx.busy} title={t("Rewind the last turn")} onClick={() => ctx.call(() => api.send("/api/game/undo"))}>↩</button>
+          <button onClick={() => setTray(!tray)} title={t("Roll any dice")}>🎲</button>
+          <button onClick={() => setPanel({ who: lead.id, tab: "items" })} title={t("狀態欄 / 物品欄 — status and items")}>🎒</button>
+          <button onClick={() => setPanel({ who: lead.id, tab: "journal" })} title={t("Clues and places")}>📖</button>
           <button onClick={ctx.openSettings} title={`Settings. Keeper: ${brainName(ctx)}`}>⚙</button>
         </div>
         {tray && <DiceTray ctx={ctx} close={() => setTray(false)} />}
@@ -260,7 +262,7 @@ export default function Play({ ctx, lastMinigame, onMinigameDone }: {
                   }} />
               </div>
             ) : !st.ending && <>
-              {lastMinigame && <details className="last-mg"><summary>🧩 Last minigame</summary><FrozenMinigame {...lastMinigame} /></details>}
+              {lastMinigame && <details className="last-mg"><summary>{t("🧩 Last minigame")}</summary><FrozenMinigame {...lastMinigame} /></details>}
               <Composer ctx={ctx} game={game} />
             </>}
         </section>

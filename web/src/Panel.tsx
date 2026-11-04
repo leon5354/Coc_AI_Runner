@@ -1,6 +1,7 @@
 // 狀態欄 / 物品欄: the character panel. One place to look at a character, their skills, what they
 // carry, and everything the party has found.
 import { useEffect, useMemo, useState } from "react"
+import { t } from "./i18n"
 import Markdown from "react-markdown"
 import * as api from "./api"
 import type { Character, Game } from "./api"
@@ -36,33 +37,33 @@ function Status({ ctx, game, ch }: { ctx: Ctx; game: Game; ch: Character }) {
           ratio={mindOf(ch)} down={ch.status !== "active"} />
         <div className="grow">
           <h2>{ch.name}</h2>
-          <p className="muted">{ch.controller === "ai" ? "AI companion" : ch.player_label || "Player"}
+          <p className="muted">{ch.controller === "ai" ? t("AI companion") : ch.player_label || t("Player")}
             {ch.status !== "active" && <b className="danger"> · {ch.status.toUpperCase()}</b>}</p>
           <Bar kind="hp" value={ch.hp} max={ch.max_hp} label={`HP ${ch.hp} / ${ch.max_hp}`} />
           {game.has_stress && <Bar kind="mind" value={ch.stress} max={ch.max_stress} label={`${game.stress_name} ${ch.stress} / ${ch.max_stress}`} />}
           {ch.luck > 0 && <Bar kind="luck" value={ch.luck} max={99} label={`Luck ${ch.luck}`} />}
           <label className="toggle">
             <input type="checkbox" checked={ch.controller === "ai"} onChange={(e) => patch({ controller: e.target.checked ? "ai" : "human" })} />
-            Played by AI
+            {t("Played by AI")}
           </label>
         </div>
       </div>
       {editing ? (
         <form onSubmit={(e) => { e.preventDefault(); patch({ ...f, name: f.name.trim() || ch.name }); setEditing(false) }}>
-          <label>Name</label><input value={f.name} onChange={set("name")} />
-          <label>Player label</label><input value={f.player_label} onChange={set("player_label")} />
-          <label>Personality</label><textarea rows={3} value={f.personality} onChange={set("personality")} />
-          <label>Background</label><textarea rows={6} value={f.backstory} onChange={set("backstory")} />
-          <div className="row"><button type="submit" className="primary">Save</button><button type="button" onClick={() => setEditing(false)}>Cancel</button></div>
+          <label>{t("Name")}</label><input value={f.name} onChange={set("name")} />
+          <label>{t("Player label")}</label><input value={f.player_label} onChange={set("player_label")} />
+          <label>{t("Personality")}</label><textarea rows={3} value={f.personality} onChange={set("personality")} />
+          <label>{t("Background")}</label><textarea rows={6} value={f.backstory} onChange={set("backstory")} />
+          <div className="row"><button type="submit" className="primary">{t("Save")}</button><button type="button" onClick={() => setEditing(false)}>{t("Cancel")}</button></div>
         </form>
       ) : <>
-        {ch.personality && <><h4>Personality</h4><p>{ch.personality}</p></>}
-        {ch.backstory && <><h4>Background</h4><p>{ch.backstory}</p></>}
-        <button onClick={() => setEditing(true)}>Edit</button>
+        {ch.personality && <><h4>{t("Personality")}</h4><p>{ch.personality}</p></>}
+        {ch.backstory && <><h4>{t("Background")}</h4><p>{ch.backstory}</p></>}
+        <button onClick={() => setEditing(true)}>{t("Edit")}</button>
       </>}
       {ch.controller === "ai" && <details>
-        <summary>🧠 What they privately think</summary>
-        {ch.memory_summary ? <p>{ch.memory_summary}</p> : <p className="muted">Their memory forms as they live through more.</p>}
+        <summary>{t("🧠 What they privately think")}</summary>
+        {ch.memory_summary ? <p>{ch.memory_summary}</p> : <p className="muted">{t("Their memory forms as they live through more.")}</p>}
         <ul>{Object.entries(ch.relationships).map(([k, v]) => <li key={k}><b>{k}</b>: {v}</li>)}</ul>
         <ul>{ch.private_thoughts.slice(-6).reverse().map((t, i) => <li key={i}><i>{t}</i></li>)}</ul>
       </details>}
@@ -77,8 +78,8 @@ function Skills({ ctx, game, ch, close }: { ctx: Ctx; game: Game; ch: Character;
   const rows = Object.entries(ch.skills).filter(([k]) => k.toLowerCase().includes(q.toLowerCase())).sort((a, b) => b[1] - a[1])
   return (
     <div>
-      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a skill…" />
-      <p className="muted small">Click a skill to try it. The Keeper decides if it needs a roll.</p>
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Find a skill…")} />
+      <p className="muted small">{t("Click a skill to try it. The Keeper decides if it needs a roll.")}</p>
       <div className="skills">
         {rows.map(([name, v]) => (
           <button key={name} className="skill" onClick={() => {
@@ -129,17 +130,17 @@ function Items({ ctx, game, ch, close }: { ctx: Ctx; game: Game; ch: Character; 
         {item && Icon ? <>
           <Icon size={64} className="item-big" />
           <h3>{item}</h3>
-          <p className="muted">{ch.item_notes[item] || (looking ? "Turning it over in your hands…" : "You haven't looked at it closely.")}</p>
+          <p className="muted">{ch.item_notes[item] || t(looking ? "Turning it over in your hands…" : "You haven't looked at it closely.")}</p>
           <div className="row">
-            <button className="primary" onClick={() => { ctx.setDraft(CJK.test(item) ? `我使用${item}：` : `I use the ${item}: `); close() }}>Use</button>
-            <button disabled={!!ch.item_notes[item] || looking || !!ctx.busy} onClick={inspect}>Inspect</button>
-            <button onClick={() => { if (confirm(`Drop ${item}? It will be gone.`)) ctx.call(() => api.send("/api/game/items/drop", { character_id: ch.id, item })) }}>Drop</button>
+            <button className="primary" onClick={() => { ctx.setDraft(CJK.test(item) ? `我使用${item}：` : `I use the ${item}: `); close() }}>{t("Use")}</button>
+            <button disabled={!!ch.item_notes[item] || looking || !!ctx.busy} onClick={inspect}>{t("Inspect")}</button>
+            <button onClick={() => { if (confirm(`Drop ${item}? It will be gone.`)) ctx.call(() => api.send("/api/game/items/drop", { character_id: ch.id, item })) }}>{t("Drop")}</button>
           </div>
           {others.length > 0 && <div className="row">
-            <span className="muted small">Give to</span>
+            <span className="muted small">{t("Give to")}</span>
             {others.map((o) => <button key={o.id} onClick={() => ctx.call(() => api.send("/api/game/items/give", { character_id: ch.id, to: o.id, item }))}>{o.name}</button>)}
           </div>}
-        </> : <p className="muted">{ch.inventory.length ? "Click an item to look at it." : "Nothing carried."}</p>}
+        </> : <p className="muted">{t(ch.inventory.length ? "Click an item to look at it." : "Nothing carried.")}</p>}
       </div>
     </div>
   )
@@ -187,14 +188,14 @@ function SceneMap({ game }: { game: Game }) {
 function Journal({ game }: { game: Game }) {
   return (
     <div>
-      <h4>Clues {game.clues.length} / {game.clues_total}</h4>
-      {game.clues.length === 0 && <p className="muted">Nothing found yet.</p>}
+      <h4>{t("Clues")} {game.clues.length} / {game.clues_total}</h4>
+      {game.clues.length === 0 && <p className="muted">{t("Nothing found yet.")}</p>}
       {game.clues.map((c) => (
         <details key={c.id}><summary>🔎 {c.name}</summary><p>{c.text}</p></details>
       ))}
-      <h4>Places</h4>
+      <h4>{t("Places")}</h4>
       <SceneMap game={game} />
-      {game.state.summary && <><h4>The story so far</h4><Markdown>{game.state.summary}</Markdown></>}
+      {game.state.summary && <><h4>{t("The story so far")}</h4><Markdown>{game.state.summary}</Markdown></>}
     </div>
   )
 }

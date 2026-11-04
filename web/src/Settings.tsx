@@ -1,5 +1,6 @@
 // Settings: which brain runs the game, how the table plays, and test tools.
 import { useEffect, useState } from "react"
+import { setUiPref, t, uiPref } from "./i18n"
 import * as api from "./api"
 import type { Brains, Game } from "./api"
 import type { Ctx } from "./App"
@@ -49,14 +50,14 @@ function Local({ ctx, brains, reload, use }: { ctx: Ctx; brains: Brains; reload:
       {ollama.models.map((m) => (
         <div key={m.name} className={m.name === active ? "model on" : "model"}>
           <span title={m.name}>{m.name.split("/").pop()}</span><i>{m.gb} GB</i>
-          <button disabled={m.name === active} onClick={() => use("ollama", m.name)}>{m.name === active ? "In use" : "Use"}</button>
-          <button onClick={() => remove(m.name)}>Remove</button>
+          <button disabled={m.name === active} onClick={() => use("ollama", m.name)}>{t(m.name === active ? "In use" : "Use")}</button>
+          <button onClick={() => remove(m.name)}>{t("Remove")}</button>
         </div>
       ))}
       <div className="row">
         <input className="grow" value={pull} onChange={(e) => setPull(e.target.value)}
           placeholder="Paste a Hugging Face GGUF link, e.g. hf.co/user/model-GGUF:Q4_K_M" />
-        <button onClick={add}>Add model</button>
+        <button onClick={add}>{t("Add model")}</button>
       </div>
       {status && <p className="small muted">{status}</p>}
     </>
@@ -80,7 +81,7 @@ function Brain({ ctx }: { ctx: Ctx }) {
   })
 
   if (meta.mock) return <p className="warn">Demo mode: a scripted Keeper is running. Start without --mock to use a real AI.</p>
-  if (!brains) return <p className="muted">Looking at what this PC can run…</p>
+  if (!brains) return <p className="muted">{t("Looking at what this PC can run…")}</p>
   const using = meta.llm.provider
   return (
     <>
@@ -88,9 +89,9 @@ function Brain({ ctx }: { ctx: Ctx }) {
         <h3>🖥 This PC <em>free</em></h3>
         <Local ctx={ctx} brains={brains} reload={reload} use={use} />
         {using === "ollama" && brains.ollama.models.length > 1 && (
-          <label>Small model for summaries (optional)
+          <label>{t("Small model for summaries (optional)")}
             <select value={util} onChange={(e) => { setUtil(e.target.value); use("ollama", meta.llm.model, e.target.value) }}>
-              <option value="">Same as the Keeper</option>
+              <option value="">{t("Same as the Keeper")}</option>
               {brains.ollama.models.map((m) => <option key={m.name} value={m.name}>{m.name.split("/").pop()}</option>)}
             </select>
           </label>
@@ -106,7 +107,7 @@ function Brain({ ctx }: { ctx: Ctx }) {
                 <select className="grow" value={claude} onChange={(e) => setClaude(e.target.value)}>
                   {meta.claude_models.map((m) => <option key={m}>{m}</option>)}
                 </select>
-                <button onClick={() => use("claude_cli", claude)}>Use</button>
+                <button onClick={() => use("claude_cli", claude)}>{t("Use")}</button>
               </div>
             </>}
       </div>
@@ -120,7 +121,7 @@ function Brain({ ctx }: { ctx: Ctx }) {
           <select value={prov} onChange={(e) => setProv(e.target.value)}><option>openrouter</option><option>google</option></select>
           <input className="grow" list="models" value={model} onChange={(e) => setModel(e.target.value)} />
           <datalist id="models">{meta.main_models.map((m) => <option key={m} value={m} />)}</datalist>
-          <button onClick={() => use(prov, model)}>Use</button>
+          <button onClick={() => use(prov, model)}>{t("Use")}</button>
         </div>
       </div>
     </>
@@ -134,50 +135,54 @@ export default function Settings({ ctx, onClose }: { ctx: Ctx; onClose: () => vo
   const [fast, setFast] = useState(() => { try { return localStorage.getItem("dice.fast") === "1" } catch { return false } })
   const setFastDice = (v: boolean) => { setFast(v); try { localStorage.setItem("dice.fast", v ? "1" : "0") } catch { /* private window */ } }
   const [who, setWho] = useState({ name: "", controller: "human", backstory: "" })
+  const [ui, setUi] = useState(uiPref())
 
   return (
     <div className="modal-back" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <header><h2>Settings</h2><button onClick={onClose}>✕</button></header>
-        <h3>Who is the Keeper?</h3>
+        <header><h2>{t("Settings")}</h2><button onClick={onClose}>✕</button></header>
+        <h3>{t("Who is the Keeper?")}</h3>
         <Brain ctx={ctx} />
-        <h3>Sound and dice</h3>
+        <label>{t("Interface")}</label>
+        <Seg options={["auto", "en", "zh"]} value={ui} labels={{ auto: "Auto", en: "English", zh: "繁體中文" }}
+          onChange={(v) => { setUiPref(v); setUi(v); ctx.refreshMeta() }} />
+        <h3>{t("Sound and dice")}</h3>
         <div className="row">
           <AmbienceButton mood={game?.mood ?? "night"} stress={1} diceNonce={st?.dice_log.length ?? 0} />
-          <label className="toggle"><input type="checkbox" checked={fast} onChange={(e) => setFastDice(e.target.checked)} /> Skip the 3D dice</label>
+          <label className="toggle"><input type="checkbox" checked={fast} onChange={(e) => setFastDice(e.target.checked)} /> {t("Skip the 3D dice")}</label>
         </div>
         {meta.audio.length > 0 && <Music tracks={meta.audio} />}
         {st && game && <>
-          <h3>This game</h3>
-          <label>Language</label>
+          <h3>{t("This game")}</h3>
+          <label>{t("Language")}</label>
           <Seg options={Object.keys(meta.languages)} value={st.language} labels={meta.languages} onChange={(v) => patch({ language: v })} />
-          <label>AI companions</label>
+          <label>{t("AI companions")}</label>
           <Seg options={["solo", "keeper", "active"]} value={st.party_mode}
-            labels={{ solo: "Narrated by Keeper", keeper: "Act when called", active: "Act every turn" }} onChange={(v) => patch({ party_mode: v })} />
-          <label>Companion voice</label>
+            labels={{ solo: t("Narrated by Keeper"), keeper: t("Act when called"), active: t("Act every turn") }} onChange={(v) => patch({ party_mode: v })} />
+          <label>{t("Companion voice")}</label>
           <Seg options={["player", "cinematic"]} value={st.companion_style}
-            labels={{ player: "Like a player", cinematic: "Like a novel" }} onChange={(v) => patch({ companion_style: v })} />
+            labels={{ player: t("Like a player"), cinematic: t("Like a novel") }} onChange={(v) => patch({ companion_style: v })} />
           <label className="toggle" title="The Keeper and companions play along with you, biasing fate your way.">
-            <input type="checkbox" checked={st.god_mode} onChange={(e) => patch({ god_mode: e.target.checked })} /> 😇 God mode
+            <input type="checkbox" checked={st.god_mode} onChange={(e) => patch({ god_mode: e.target.checked })} /> {t("😇 God mode")}
           </label>
           <details>
-            <summary>➕ Add a character</summary>
+            <summary>{t("➕ Add a character")}</summary>
             <form onSubmit={async (e) => {
               e.preventDefault()
               if (!who.name.trim()) return
               await ctx.call(() => api.send("/api/game/characters", who))
               setWho({ name: "", controller: "human", backstory: "" })
             }}>
-              <label>Name</label><input value={who.name} onChange={(e) => setWho({ ...who, name: e.target.value })} />
-              <label>Played by</label>
+              <label>{t("Name")}</label><input value={who.name} onChange={(e) => setWho({ ...who, name: e.target.value })} />
+              <label>{t("Played by")}</label>
               <Seg options={["human", "ai"]} value={who.controller as "human" | "ai"} onChange={(v) => setWho({ ...who, controller: v })} />
-              <label>Background</label>
+              <label>{t("Background")}</label>
               <textarea rows={3} value={who.backstory} onChange={(e) => setWho({ ...who, backstory: e.target.value })} />
-              <button type="submit">Add</button>
+              <button type="submit">{t("Add")}</button>
             </form>
           </details>
           <details>
-            <summary>🧪 Try a minigame</summary>
+            <summary>{t("🧪 Try a minigame")}</summary>
             <div className="row">
               {Object.entries(meta.minigames).map(([type, label]) => (
                 <button key={type} disabled={!!st.pending_minigame || !!ctx.busy}
@@ -186,11 +191,11 @@ export default function Settings({ ctx, onClose }: { ctx: Ctx; onClose: () => vo
             </div>
           </details>
           <details>
-            <summary>🎲 Dice log</summary>
+            <summary>{t("🎲 Dice log")}</summary>
             {st.dice_log.slice(-40).reverse().map((l, i) => <p key={i} className="muted small">{l}</p>)}
           </details>
           <div className="row">
-            <a className="button" href="/api/game/export" download={`${game.title}.md`}>📜 Export story</a>
+            <a className="button" href="/api/game/export" download={`${game.title}.md`}>{t("📜 Export story")}</a>
           </div>
         </>}
       </div>
@@ -202,9 +207,9 @@ function Music({ tracks }: { tracks: string[] }) {
   const [pick, setPick] = useState("")
   return (
     <>
-      <label>Background music</label>
+      <label>{t("Background music")}</label>
       <select value={pick} onChange={(e) => setPick(e.target.value)}>
-        <option value="">Off</option>
+        <option value="">{t("Off")}</option>
         {tracks.map((t) => <option key={t}>{t}</option>)}
       </select>
       {pick && <audio src={`/api/audio/${encodeURIComponent(pick)}`} controls loop autoPlay />}

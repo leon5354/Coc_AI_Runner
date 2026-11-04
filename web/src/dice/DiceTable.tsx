@@ -1,5 +1,6 @@
 // Full-screen dice moment: grab the dice, flick them, watch them land on the server's number.
 import { useEffect, useRef, useState } from "react"
+import { t } from "../i18n"
 import type { RollEvent } from "../api"
 import { DiceScene, unlockAudio, type DieSpec } from "./table"
 
@@ -22,8 +23,8 @@ export type TableProps = {
 
 function resultName(ev: RollEvent) {
   if (ev.kind === "free") return ""
-  if (ev.kind === "stress") return ev.success ? "Held firm" : "Shaken"
-  return ev.tier
+  if (ev.kind === "stress") return t(ev.success ? "Held firm" : "Shaken")
+  return t(ev.tier)
 }
 
 export default function DiceTable({ title, subtitle, preset, auto, onThrow, onDone, onCancel }: TableProps) {
@@ -123,12 +124,12 @@ export default function DiceTable({ title, subtitle, preset, auto, onThrow, onDo
       )}
       <div className="dt-foot" onPointerDown={(e) => e.stopPropagation()}>
         {!auto && phase === "ready" && <>
-          <span>Press and hold to grab the dice, then flick and let go</span>
-          <button className="primary" onClick={() => { unlockAudio(); go() }}>Just throw</button>
-          {onCancel && <button onClick={onCancel}>Back</button>}
+          <span>{t("Press and hold to grab the dice, then flick and let go")}</span>
+          <button className="primary" onClick={() => { unlockAudio(); go() }}>{t("Just throw")}</button>
+          {onCancel && <button onClick={onCancel}>{t("Back")}</button>}
         </>}
-        {phase === "held" && <span>Let go to throw!</span>}
-        {phase === "result" && <span>Click to continue</span>}
+        {phase === "held" && <span>{t("Let go to throw!")}</span>}
+        {phase === "result" && <span>{t("Click to continue")}</span>}
       </div>
     </div>
   )

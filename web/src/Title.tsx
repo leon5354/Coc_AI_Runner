@@ -1,5 +1,6 @@
 // The front door: campaigns as cards over their own art.
 import { useState } from "react"
+import { t } from "./i18n"
 import * as api from "./api"
 import type { Game } from "./api"
 import type { Ctx } from "./App"
@@ -39,15 +40,15 @@ export default function Title({ ctx }: { ctx: Ctx }) {
       <header className="title-top">
         <h1>AI TTRPG Runner</h1>
         <div className="row">
-          <button onClick={() => ctx.go("architect")}>New scenario</button>
-          <button onClick={ctx.openSettings}>⚙ Settings</button>
+          <button onClick={() => ctx.go("architect")}>{t("New scenario")}</button>
+          <button onClick={ctx.openSettings}>{t("⚙ Settings")}</button>
         </div>
       </header>
       <section className="title-cards">
         {meta.campaigns.map((c) => (
           <button key={c.file} className={c.file === chosen.file ? "card-c on" : "card-c"} onClick={() => setFile(c.file)}>
             <b>{c.title}</b>
-            <span>{c.system}{c.has_save ? " · saved game" : ""}</span>
+            <span>{c.system}{c.has_save ? ` · ${t("saved game")}` : ""}</span>
           </button>
         ))}
       </section>
@@ -57,9 +58,9 @@ export default function Title({ ctx }: { ctx: Ctx }) {
         <p className="title-intro">{chosen.intro}{chosen.intro.length >= 220 ? "…" : ""}</p>
         <div className="row">
           <button className="primary big" onClick={() => start(false)}>
-            {game && `${game.campaign}.yaml` === chosen.file ? "Continue" : chosen.has_save ? "Resume" : "Begin"}
+            {t(game && `${game.campaign}.yaml` === chosen.file ? "Continue" : chosen.has_save ? "Resume" : "Begin")}
           </button>
-          {chosen.has_save && <button className="big" onClick={() => start(true)}>Start over</button>}
+          {chosen.has_save && <button className="big" onClick={() => start(true)}>{t("Start over")}</button>}
         </div>
         <p className="title-brain" onClick={ctx.openSettings}>🧠 {brainName(ctx)}</p>
       </section>

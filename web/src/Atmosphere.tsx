@@ -1,5 +1,6 @@
 // Sanity vignette and procedural WebAudio ambience (no audio assets).
 import { useEffect, useRef, useState } from "react"
+import { t } from "./i18n"
 
 const DRONES: Record<string, number> = { daylight: 110, dusk: 82, night: 55, unearthly: 66 }
 
@@ -93,5 +94,5 @@ export function AmbienceButton({ mood, stress, diceNonce }: { mood: string; stre
     setOn(!on)
   }
 
-  return <button className={on ? "amb on" : "amb"} onClick={toggle}>{on ? "🔊 Sound on" : "🔇 Turn on sound"}</button>
+  return <button className={on ? "amb on" : "amb"} onClick={toggle}>{t(on ? "🔊 Sound on" : "🔇 Turn on sound")}</button>
 }
